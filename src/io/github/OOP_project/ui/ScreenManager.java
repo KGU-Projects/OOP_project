@@ -1,8 +1,10 @@
 package io.github.OOP_project.ui;
 
+import io.github.OOP_project.common.ScreenType;
+
+import java.awt.CardLayout;
 import java.util.EnumMap;
 import java.util.Map;
-
 import javax.swing.JPanel;
 
 public class ScreenManager {
@@ -22,6 +24,7 @@ public class ScreenManager {
         this.layout = layout;
     }
 
+    // 화면등록
     public void register(ScreenType type, Screen screen) {
 
         if (type == null || screen == null) {
@@ -32,16 +35,20 @@ public class ScreenManager {
         container.add(screen.getPanel(), type.name());
     }
 
+    // 화면등장
     public void show(ScreenType type) {
-
-        if (type == null) {
-            throw new IllegalArgumentException("ERROR: illegal ScreenType" + type);
+        if (type == null || !screens.containsKey(type)) {
+            throw new IllegalArgumentException("ScreenType not registered: " + type);
         }
 
         if (currentType != null) {
             Screen currentScreen = screens.get(currentType);
             if (currentScreen != null) {
-                currentScreen.onExit();
+                try {
+                    currentScreen.onExit();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
             }
         }
 
@@ -50,8 +57,21 @@ public class ScreenManager {
 
         Screen nextScreen = screens.get(type);
         if (nextScreen != null) {
-            nextScreen.onEnter();
+            try {
+                nextScreen.onEnter();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
         }
+
+    }
+
+    public ScreenType getCurrentType() {
+        return currentType;
+    }
+
+    public Screen getScreen(ScreenType type) {
+        return screens.get(type);
     }
 
 }
