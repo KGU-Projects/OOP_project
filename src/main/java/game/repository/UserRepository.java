@@ -1,6 +1,6 @@
-package main.java.game.repository;
+package game.repository;
 
-import main.java.game.model.User;
+import game.model.User;
 
 import java.util.List;
 import java.util.Optional;

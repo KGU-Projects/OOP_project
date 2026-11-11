@@ -1,4 +1,4 @@
-package main.java.game.service;
+package game.service;
 
 //임시 서비스
 public class UserService {

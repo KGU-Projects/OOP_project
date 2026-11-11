@@ -1,6 +1,6 @@
-package main.java.game.repository;
+package game.repository;
 
-import main.java.game.model.SaveData;
+import game.model.SaveData;
 
 import java.util.Optional;
 

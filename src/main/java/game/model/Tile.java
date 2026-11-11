@@ -1,4 +1,4 @@
-package main.java.game.model;
+package game.model;
 
 /** 변하지 않는 지형 타일. 문·버튼 같은 오브젝트는 Tile이 아니라 GameObject로 다룬다. */
 public enum Tile {

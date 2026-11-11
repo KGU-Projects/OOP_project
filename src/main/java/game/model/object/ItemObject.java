@@ -1,6 +1,6 @@
-package main.java.game.model.object;
+package game.model.object;
 
-import main.java.game.model.ItemType;
+import game.model.ItemType;
 
 /** 주우면 인벤토리에 들어가는 아이템. */
 public class ItemObject extends GameObject {

@@ -1,6 +1,6 @@
-package main.java.game.repository;
+package game.repository;
 
-import main.java.game.model.quiz.Quiz;
+import game.model.quiz.Quiz;
 
 import java.util.List;
 import java.util.Optional;

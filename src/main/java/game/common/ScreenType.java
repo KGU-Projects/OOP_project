@@ -1,4 +1,4 @@
-package main.java.game.common;
+package game.common;
 
 public enum ScreenType {
     START,

@@ -1,4 +1,4 @@
-package main.java.game.repository.file;
+package game.repository.file;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;

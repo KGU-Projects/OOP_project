@@ -1,6 +1,6 @@
-package main.java.game.ui;
+package game.ui;
 
-import main.java.game.common.ScreenType;
+import game.common.ScreenType;
 
 import java.awt.CardLayout;
 import java.util.EnumMap;

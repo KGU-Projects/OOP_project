@@ -1,13 +1,23 @@
-package main.java.game.ui.screens;
+package game.ui.screens;
 
-import main.java.game.service.UserService;
-import main.java.game.ui.Screen;
-import main.java.game.ui.ScreenManager;
+import game.service.UserService;
+import game.ui.Screen;
+import game.ui.ScreenManager;
 
-import javax.swing.*;
+import javax.swing.BorderFactory;
+import javax.swing.JButton;
+import javax.swing.JLabel;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.LineBorder;
-import java.awt.*;
+import java.awt.Color;
+import java.awt.Dimension;
+import java.awt.Font;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
+import java.awt.GridLayout;
+import java.awt.Insets;
 
 public class StartScreen implements Screen {
 

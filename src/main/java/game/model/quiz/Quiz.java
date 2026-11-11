@@ -1,4 +1,4 @@
-package main.java.game.model.quiz;
+package game.model.quiz;
 
 /**
  * 문제의 공통 부분. 유형별 판정은 하위 클래스가 isCorrect로 맡는다.

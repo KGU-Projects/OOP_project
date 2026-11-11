@@ -1,4 +1,4 @@
-package main.java.game.common;
+package game.common;
 
 /**
  * 게임 전체에서 쓰는 상수 모음.

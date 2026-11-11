@@ -1,4 +1,4 @@
-package main.java.game.model.object;
+package game.model.object;
 
 /** 보스 스테이지의 보스. 퀴즈를 맞히면 데미지를 입는다. */
 public class BossObject extends GameObject {
