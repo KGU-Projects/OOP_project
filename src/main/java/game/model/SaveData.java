@@ -1,4 +1,4 @@
-package main.java.game.model;
+package game.model;
 
 import java.time.LocalDateTime;
 import java.util.Collections;

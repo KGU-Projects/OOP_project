@@ -1,4 +1,4 @@
-package main.java.game.model.object;
+package game.model.object;
 
 /** 오브젝트 종류. symbol은 개발용 맵 미리보기에서 쓰는 글자이고 스테이지 파일에는 쓰지 않는다. */
 public enum ObjectType {

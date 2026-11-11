@@ -1,17 +1,17 @@
-package main.java.game.repository.file;
+package game.repository.file;
 
-import main.java.game.model.ItemType;
-import main.java.game.model.Stage;
-import main.java.game.model.StageType;
-import main.java.game.model.Tile;
-import main.java.game.model.object.BossObject;
-import main.java.game.model.object.ButtonObject;
-import main.java.game.model.object.DoorObject;
-import main.java.game.model.object.GameObject;
-import main.java.game.model.object.ItemObject;
-import main.java.game.model.object.KeyObject;
-import main.java.game.model.object.ObjectType;
-import main.java.game.repository.StageRepository;
+import game.model.ItemType;
+import game.model.Stage;
+import game.model.StageType;
+import game.model.Tile;
+import game.model.object.BossObject;
+import game.model.object.ButtonObject;
+import game.model.object.DoorObject;
+import game.model.object.GameObject;
+import game.model.object.ItemObject;
+import game.model.object.KeyObject;
+import game.model.object.ObjectType;
+import game.repository.StageRepository;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;

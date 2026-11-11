@@ -1,4 +1,4 @@
-package main.java.game.model.quiz;
+package game.model.quiz;
 
 /** 입력형. 앞뒤 공백을 제거하고 대소문자를 무시해 정답 문자열과 비교한다. */
 public class InputQuiz extends Quiz {

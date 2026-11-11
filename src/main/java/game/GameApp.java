@@ -1,24 +1,26 @@
-package main.java.game;
+package game;
 
-import main.java.game.ui.*;
-import main.java.game.ui.screens.*;
-import main.java.game.service.*;
-import main.java.game.common.*;
+import game.ui.ScreenManager;
+import game.ui.screens.StartScreen;
+import game.service.UserService;
+import game.common.ScreenType;
 
+import java.awt.CardLayout;
 import javax.swing.JFrame;
-//import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
-import java.awt.*;
-//import java.game.lang.classfile.Label;
+
+//게임의 시작점
+//jframe으로 게임 윈도우 생성
+//UserService, ScreenManager 시동
 
 public class GameApp {
 
-    void main() {
+    public static void main(String[] args) {
         initGame();
     }
 
-    private void initGame() {
+    private static void initGame() {
         SwingUtilities.invokeLater(() -> {
             // 창 jframe 생성, 설정
             JFrame frame = new JFrame("OOP_project");

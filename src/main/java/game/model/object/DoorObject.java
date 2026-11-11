@@ -1,4 +1,4 @@
-package main.java.game.model.object;
+package game.model.object;
 
 /** 폭 1타일, 아래로 height만큼 막는 문. 처음에는 닫혀 있다. */
 public class DoorObject extends GameObject {

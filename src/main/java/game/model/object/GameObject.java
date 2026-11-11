@@ -1,4 +1,4 @@
-package main.java.game.model.object;
+package game.model.object;
 
 import java.util.List;
 import java.util.Optional;

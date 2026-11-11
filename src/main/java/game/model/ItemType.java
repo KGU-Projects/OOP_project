@@ -1,4 +1,4 @@
-package main.java.game.model;
+package game.model;
 
 /**
  * 아이템 종류. 이름은 스테이지 파일과 세이브 파일에 그대로 적힌다.

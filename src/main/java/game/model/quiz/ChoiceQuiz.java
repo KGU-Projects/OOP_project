@@ -1,4 +1,4 @@
-package main.java.game.model.quiz;
+package game.model.quiz;
 
 import java.util.List;
 

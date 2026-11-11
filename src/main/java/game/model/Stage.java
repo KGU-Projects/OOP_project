@@ -1,7 +1,7 @@
-package main.java.game.model;
+package game.model;
 
-import main.java.game.common.GameConstants;
-import main.java.game.model.object.GameObject;
+import game.common.GameConstants;
+import game.model.object.GameObject;
 
 import java.util.List;
 import java.util.Optional;

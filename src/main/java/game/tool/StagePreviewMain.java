@@ -1,10 +1,10 @@
-package main.java.game.tool;
+package game.tool;
 
-import main.java.game.common.GameConstants;
-import main.java.game.model.Stage;
-import main.java.game.repository.StageRepository;
-import main.java.game.repository.file.DataFormatException;
-import main.java.game.repository.file.FileStageRepository;
+import game.common.GameConstants;
+import game.model.Stage;
+import game.repository.StageRepository;
+import game.repository.file.DataFormatException;
+import game.repository.file.FileStageRepository;
 
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
@@ -15,7 +15,7 @@ import java.util.Optional;
 /**
  * 개발용 스테이지 미리보기. 게임이 아니므로 GameApp을 거치지 않고 파일 구현체를 직접 만든다.
  *
- * 사용: java.game -cp out main.java.game.tool.StagePreviewMain [스테이지 번호]
+ * 사용: java.game -cp out game.tool.StagePreviewMain [스테이지 번호]
  * 번호를 생략하면 모든 스테이지를 출력한다. 프로젝트 루트에서 실행한다.
  */
 public class StagePreviewMain {

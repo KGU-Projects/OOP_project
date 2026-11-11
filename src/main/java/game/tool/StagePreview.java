@@ -1,8 +1,8 @@
-package main.java.game.tool;
+package game.tool;
 
-import main.java.game.model.Stage;
-import main.java.game.model.Tile;
-import main.java.game.model.object.GameObject;
+import game.model.Stage;
+import game.model.Tile;
+import game.model.object.GameObject;
 
 /**
  * 스테이지의 지형과 오브젝트를 겹쳐 글자 그림으로 만든다. 개발용이며 파일을 읽지 않는다.
