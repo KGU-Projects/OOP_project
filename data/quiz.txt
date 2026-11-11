@@ -1,0 +1,1 @@
+1|1|CHOICE|int형 변수 선언으로 올바른 것은?|int a = 3;~a int = 3;~int: a = 3;~var int a;|1|int 뒤에 변수명을 씁니다.
