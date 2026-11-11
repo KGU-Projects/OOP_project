@@ -155,6 +155,7 @@ classDiagram
     class ItemType {
         <<enumeration>>
         HEALTH_POTION
+        KEY
         +use(Player) boolean*
     }
     class Inventory {
@@ -192,16 +193,16 @@ classDiagram
         -Player player
         -GameStatus status
         -int score
-        -Set~Integer~ keys
         -Set~String~ openedDoorIds
         -Set~String~ solvedObjectIds
         -Set~String~ collectedObjectIds
         -int bossHp
         -int currentSlot
+        -int stageEntryHp
         -int stageEntryScore
         -Inventory stageEntryInventory
         +isDoorOpen(String id) boolean
-        +hasAllKeys(int normalStageCount) boolean
+        +hasAllKeys(int normalStageCount) boolean   // 인벤토리의 KEY 개수로 판단
     }
     GameState o-- User
     GameState o-- Stage
@@ -209,20 +210,12 @@ classDiagram
     GameState ..> GameStatus
 
     class SaveData {
-        -int stageNo
-        -double x
-        -double y
+        -int clearedStage
         -int hp
         -int score
         -Map~ItemType, Integer~ inventory
-        -Set~Integer~ keys
-        -Set~String~ openedDoorIds
-        -Set~String~ solvedObjectIds
-        -Set~String~ collectedObjectIds
-        -int bossHp
-        -int stageEntryScore
-        -Map~ItemType, Integer~ stageEntryInventory
         -LocalDateTime savedAt
+        +getNextStageNo() int
     }
 
     class AnswerResult {
@@ -494,7 +487,7 @@ classDiagram
 | 클래스                            | 근거                                                                                                                                              |
 | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `User`                            | `users.txt` 4개 필드: 닉네임, 최고점수, 클리어 수, 마지막 플레이 일시 `[문서]`                                                                    |
-| `SaveData`                        | `slotN.txt` 14개 필드 순서 그대로 `[문서]`                                                                                                        |
+| `SaveData`                        | `slotN.txt` 5개 필드 순서 그대로. 스테이지 안의 진행은 저장하지 않는다 `[문서]`                                                                                                        |
 | `Quiz`, `ChoiceQuiz`, `InputQuiz` | `quiz.txt` 7개 필드. 보기는 `~` 구분 리스트, 객관식 정답은 1부터의 번호, 입력형 정답은 문자열 `[문서]`                                            |
 | `Stage`, `Tile`, `StageType`      | `stageN.txt` 정보 줄(번호·제목·학습 개념·유형·테마·가로·세로)과 지형 문자 `#` `.` `P` `[문서]`. 시작 타일 `startTileX/startTileY`는 `P`에서, `getStartX/getStartY`는 그 타일에 서는 좌표 `[도출]`      |
 | `GameObject` 하위 클래스          | 오브젝트 줄의 종류별 세부값 `[문서]`. `getWidth/getHeight`와 `isSolid` 시그니처는 `[도출]`                                                        |

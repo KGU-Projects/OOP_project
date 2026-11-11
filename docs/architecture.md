@@ -80,7 +80,7 @@ public abstract class GameObject {
 | -------------- | ------------------ | --------------------------------------------------- | ------------------------------------------------------------ |
 | `ButtonObject` | false              | 아직 안 풀었으면 퀴즈 요청(`quizId`), 풀었으면 없음 | 연결된 문 ID를 `openedDoorIds`에 추가, 자신을 푼 것으로 기록 |
 | `DoorObject`   | 열리기 전까지 true | 없음                                                | -                                                            |
-| `KeyObject`    | false              | 열쇠 획득, 스테이지 클리어 결과                     | -                                                            |
+| `KeyObject`    | false              | 인벤토리에 `KEY` 1개 추가, 스테이지 클리어 결과     | -                                                            |
 | `ItemObject`   | false              | 인벤토리에 추가하고 획득 기록, 주웠다는 결과        | -                                                            |
 | `BossObject`   | true               | 보스 퀴즈 요청                                      | 풀이 시간으로 데미지를 계산해 보스 체력 감소                 |
 
@@ -95,6 +95,9 @@ public abstract class GameObject {
 public enum ItemType {
     HEALTH_POTION {
         @Override public boolean use(Player player) { /* 체력 회복, 최대 체력 이내 */ }
+    },
+    KEY {
+        @Override public boolean use(Player player) { return false; }   // 사용하는 아이템이 아니라 문이 소비한다
     };
 
     public abstract boolean use(Player player);
@@ -210,12 +213,13 @@ public void save(int slot);
 ```
 
 - `GameStatus`(`PLAYING`, `QUIZ`, `GAME_OVER`, `CLEARED`)를 `GameState`가 갖는다. 화면은 `onEnter`에서 상태를 보고 `GAME_OVER`나 `ENDING`으로 전환한다.
-- 열쇠를 얻으면 스테이지 클리어를 처리한다: 점수 가산, `UserService`로 최고점수·클리어 수 갱신, 다음 스테이지 로드. 모든 일반 스테이지의 열쇠를 모았으면 다음은 보스 스테이지다.
+- 열쇠(`KeyObject`)를 얻으면 인벤토리에 `ItemType.KEY`가 1개 늘고 스테이지 클리어를 처리한다: 점수 가산, `UserService`로 최고점수·클리어 수 갱신, 다음 스테이지 로드. 인벤토리의 `KEY` 개수가 일반 스테이지 수 이상이면 다음은 보스 스테이지다.
 - 퀴즈 풀이 시간은 `interact()`가 퀴즈를 돌려주는 시점부터 `submitAnswer()`까지 `System.nanoTime()`으로 잰다. 게임 타이머가 멈춰도 영향이 없다.
 - 보스 퀴즈는 `quiz.txt`에서 `stageNo`가 보스 스테이지 번호인 문제 중 아직 안 낸 것을 무작위로 고른다. 다 냈으면 다시 섞는다.
 - 오답이면 `GameConstants.WRONG_ANSWER_DAMAGE`만큼 `Player` 체력을 깎고, 0이 되면 `GameStatus.GAME_OVER`로 바꾼다.
 - `restartStage()`는 체력을 최대로 채우고, 점수·인벤토리를 `GameState`의 스테이지 입장 시점 값으로 되돌리고, 문·버튼·아이템 기록을 비우고, 플레이어를 시작 위치로 옮긴다.
-- `restartFromSave()`는 `GameState`가 기억하는 마지막 슬롯(`currentSlot`)을 다시 불러온다. `0`이면 저장한 적이 없으므로 `canRestartFromSave()`가 false다.
+- `restartFromSave()`는 `GameState`가 기억하는 마지막 슬롯(`currentSlot`)을 다시 불러온다. 슬롯에는 마지막으로 클리어한 스테이지까지만 있으므로 그 다음 스테이지의 시작 지점에서 시작한다. `0`이면 저장한 적이 없으므로 `canRestartFromSave()`가 false다.
+- `save(slot)`은 스테이지 안의 진행(위치, 열린 문, 푼 버튼, 주운 아이템, 보스 체력)을 저장하지 않는다. `clearedStage`는 `현재 스테이지 번호 − 1`이고, 체력·점수·인벤토리는 현재 값이 아니라 스테이지에 입장한 시점의 값(`GameState`의 `stageEntryHp/Score/Inventory`)을 쓴다. 열쇠는 인벤토리에 있는 `KEY` 아이템이라 인벤토리와 함께 저장된다.
 
 `AnswerResult`: `correct`, `explanation`, `damageTaken`, `bossDamage`, `gainedScore`, `playerDead`, `bossDefeated`.
 
