@@ -71,7 +71,6 @@ src/io/github/OOP_project/
     quiz/       Quiz, ChoiceQuiz, InputQuiz
   repository/   저장소 인터페이스
     file/       텍스트 파일 구현체
-    memory/     개발용 메모리 구현체
   service/      UserService, GameService, SaveService, PhysicsEngine
   tool/         StagePreview (개발용 맵 미리보기)
   ui/           Screen, ScreenManager

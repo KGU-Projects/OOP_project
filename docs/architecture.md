@@ -15,7 +15,6 @@ io.github.OOP_project
     quiz/                     [예정] Quiz(추상), ChoiceQuiz, InputQuiz, QuizType
   repository/                 [예정] UserRepository, QuizRepository, StageRepository, SaveRepository (인터페이스)
     file/                     [예정] TextFileIO, File*Repository, DataFormatException
-    memory/                   [예정] InMemory*Repository (개발용)
   service/                    [현재] UserService(임시)  [예정] GameService, SaveService, PhysicsEngine
   tool/                       [현재] StagePreview, StagePreviewMain (개발용 맵 미리보기, 게임 실행과 무관)
   ui/                         [현재] Screen, ScreenManager
@@ -135,7 +134,21 @@ public interface SaveRepository {
 - `StageRepository`도 읽기 전용이다. 스테이지는 `data/stages/stageN.txt`를 직접 편집해서 관리한다.
 - `SaveRepository`는 슬롯 하나를 읽고 쓴다. 슬롯 목록은 `SaveService`가 `1..SAVE_SLOT_COUNT`를 반복해 만든다.
 - `User`에서 진행 상태가 빠지고 `SaveData`가 생겼으므로, `UserRepository`의 시그니처는 그대로여도 다루는 필드가 바뀐다. 형식은 `data-format.md`를 따른다.
-- 파일 구현이 끝나기 전에는 `InMemory...Repository`로 대체해 개발한다.
+- 파일 구현이 끝나기 전에는 인터페이스를 테스트 코드 안에서 람다나 익명 클래스로 만들어 쓴다. 별도의 메모리 구현 클래스는 두지 않는다.
+
+### 저장소 공통 계약
+
+인터페이스의 Javadoc에도 같은 내용이 있다. service는 이 계약만 믿고 코드를 쓰고, 파일 구현은 이 계약을 지킨다.
+
+| 상황                             | 동작                                                                                         |
+| -------------------------------- | -------------------------------------------------------------------------------------------- |
+| 찾는 대상이 없음                 | `Optional.empty()`를 돌려준다. 예외가 아니다.                                                |
+| 읽는 파일이나 폴더가 없음        | `findAll`은 빈 목록, `SaveRepository.find`는 `empty`. 쓸 때는 필요한 폴더와 파일을 만든다.   |
+| 데이터 형식이 틀림               | `DataFormatException`(파일 이름·줄 번호 포함). 호출하는 쪽이 복구하지 않고 사용자에게 알린다. |
+| 입출력 실패                      | `UncheckedIOException`                                                                       |
+| 잘못된 인자(슬롯 범위, 닉네임 규칙 위반, 닉네임이 중복된 목록 저장) | `IllegalArgumentException`                                       |
+| `UserRepository.saveAll`         | 목록 전체를 덮어쓴다. 일부만 고치는 메서드는 없다.                                           |
+| `SaveRepository.save`            | 슬롯 하나를 덮어쓴다. `delete`는 이미 빈 슬롯이면 아무 일도 하지 않는다.                    |
 
 ## Screen과 화면 전환
 
@@ -259,7 +272,7 @@ java -cp out io.github.OOP_project.tool.StagePreviewMain       # 모든 스테�
 ```
 
 - 파일 읽기는 `FileStageRepository`를 재사용한다. 도구가 따로 파싱하지 않으므로 게임이 읽는 방식 그대로 검사되고, 형식 오류는 파일 이름과 줄 번호를 포함한 `DataFormatException` 메시지로 나온다. 미리보기가 곧 데이터 검증 도구다.
-- `StagePreview`는 `Stage`만 알고 파일을 모른다. 그래서 `InMemoryStageRepository`로 만든 `Stage`에도 쓸 수 있다.
+- `StagePreview`는 `Stage`만 알고 파일을 모른다. 그래서 코드에서 직접 만든 `Stage`에도 쓸 수 있다.
 - `StagePreviewMain`은 게임이 아니므로 `GameApp`을 거치지 않고 `FileStageRepository`를 직접 만든다. 이것이 "구현체 연결은 `GameApp`에서만"의 유일한 예외다.
 
 출력은 격자의 좌표 눈금, 오브젝트를 겹친 지도, 오브젝트 범례로 이뤄진다.

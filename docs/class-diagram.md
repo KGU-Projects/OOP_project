@@ -47,6 +47,9 @@ classDiagram
         -int highScore
         -int clearedStages
         -LocalDateTime lastPlayedAt
+        +createNew(String nickname, LocalDateTime now) User$
+        +recordStageClear(int score, LocalDateTime at)
+        +updateLastPlayedAt(LocalDateTime at)
     }
 
     class Tile {
@@ -233,7 +236,7 @@ classDiagram
     }
 ```
 
-## 2. Repository (`repository`, `repository.file`, `repository.memory`)
+## 2. Repository (`repository`, `repository.file`)
 
 데이터 접근 계층. Model 클래스는 이름만 표시했다. 필드는 1번 다이어그램 참조.
 
@@ -277,10 +280,6 @@ classDiagram
     class FileSaveRepository {
         -Path directory
     }
-    class InMemoryQuizRepository
-    class InMemoryUserRepository
-    class InMemoryStageRepository
-    class InMemorySaveRepository
     class StagePreview {
         +render(Stage stage) String
     }
@@ -290,13 +289,9 @@ classDiagram
     }
 
     QuizRepository <|.. FileQuizRepository
-    QuizRepository <|.. InMemoryQuizRepository
     UserRepository <|.. FileUserRepository
-    UserRepository <|.. InMemoryUserRepository
     StageRepository <|.. FileStageRepository
-    StageRepository <|.. InMemoryStageRepository
     SaveRepository <|.. FileSaveRepository
-    SaveRepository <|.. InMemorySaveRepository
 
     FileQuizRepository ..> DataFormatException
     FileUserRepository ..> DataFormatException
