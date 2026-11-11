@@ -1,0 +1,19 @@
+package io.github.OOP_project.model.object;
+
+/** 얻으면 스테이지가 클리어되는 열쇠. */
+public class KeyObject extends GameObject {
+
+    public KeyObject(String id, int x, int y) {
+        super(id, x, y);
+    }
+
+    @Override
+    public ObjectType getType() {
+        return ObjectType.KEY;
+    }
+
+    @Override
+    public String describe() {
+        return "열쇠";
+    }
+}
