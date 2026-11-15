@@ -47,7 +47,10 @@ public class LoadScreen extends BaseScreen {
             "2천시",
             "3",
             "4",
-            "5");
+            "5", "인천시 던전구 마왕로",
+            "2천시",
+            "3",
+            "4");
 
     // private final JPanel panel;
     // private final ScreenManager screenManager;

@@ -13,6 +13,8 @@ import java.util.Set;
 /**
  * 한 스테이지 플레이 중 변하는 런타임 상태.
  * 불변 객체인 Stage / GameObject 정의와 분리되어 문 열림, 버튼 해결, 아이템 획득 등을 관리한다.
+ * 
+ * AI딸깍으로 만들었으니 추후에 제거바람
  */
 public class GameState {
 
