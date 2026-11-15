@@ -57,6 +57,8 @@ import java.util.function.IntFunction;
 /**
  * BaseScreen을 상속하는 실제 플랫포머 플레이 화면.
  * ScreenManager의 onEnter() / onExit() 생명주기에 맞춰 게임 루프와 키 포커스를 제어한다.
+ * 
+ * AI딸깎으로 만들었으니 추후에 제거바람
  */
 public class GameScreen extends BaseScreen {
 
@@ -82,7 +84,7 @@ public class GameScreen extends BaseScreen {
 
     private static final double MOVE_SPEED = 6.2; // tiles / sec
     private static final double GRAVITY = 26.0; // tiles / sec^2
-    private static final double JUMP_VELOCITY = -11.8; // tiles / sec
+    private static final double JUMP_VELOCITY = -110.8; // tiles / sec
     private static final double MAX_FALL_SPEED = 16.0; // tiles / sec
     private static final double EPS = 1e-4;
     private static final int DEFAULT_MAX_HP = 5;
