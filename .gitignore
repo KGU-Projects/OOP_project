@@ -33,4 +33,6 @@ out/
 .DS_Store
 data/users.txt
 data/saves/
+
 .vscode/
+.target/
