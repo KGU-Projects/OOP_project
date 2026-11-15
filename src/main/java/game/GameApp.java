@@ -1,11 +1,14 @@
 package game;
 
 import game.ui.ScreenManager;
+import game.ui.screens.LoadScreen;
 import game.ui.screens.StartScreen;
 import game.service.UserService;
 import game.common.ScreenType;
 
 import java.awt.CardLayout;
+//import java.awt.Dimension;
+
 import javax.swing.JFrame;
 import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
@@ -16,17 +19,25 @@ import javax.swing.SwingUtilities;
 
 public class GameApp {
 
+    // 종횡비고정 16:9
+    // private static final double ASPECT_RATIO = 16.0 / 9.0;
+    private static final int DEFAULT_WIDTH = 1280;
+    private static final int DEFAULT_HEIGHT = 720;
+    // private static final int MIN_WIDTH = 800;
+    // private static final int MIN_HEIGHT = 450;
+
     public static void main(String[] args) {
         initGame();
     }
 
     private static void initGame() {
         SwingUtilities.invokeLater(() -> {
-            // 창 jframe 생성, 설정
+            // 창 생성
             JFrame frame = new JFrame("OOP_project");
             frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-            frame.setSize(1200, 900);
-            frame.setMinimumSize(new java.awt.Dimension(800, 600));
+            frame.setSize(DEFAULT_WIDTH, DEFAULT_HEIGHT);
+            frame.setResizable(false);
+            // frame.setMinimumSize(new Dimension(MIN_WIDTH, MIN_HEIGHT));
             frame.setLocationRelativeTo(null);
 
             CardLayout cardLayout = new CardLayout();
@@ -35,7 +46,9 @@ public class GameApp {
             ScreenManager screenManager = new ScreenManager(mainContainer, cardLayout);
             UserService userService = new UserService();
 
-            screenManager.register(ScreenType.START, new StartScreen(screenManager, userService));
+            // 스크린매니저에 각 화면 등록, 등장
+            screenManager.register(ScreenType.START, new StartScreen(screenManager));
+            screenManager.register(ScreenType.LOAD, new LoadScreen(screenManager, userService));
             frame.add(mainContainer);
             frame.setVisible(true);
             screenManager.show(ScreenType.START);
