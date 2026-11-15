@@ -1,5 +1,6 @@
 package game.ui.screens;
 
+import game.common.ScreenType;
 import game.service.UserService;
 import game.ui.Screen;
 import game.ui.ScreenManager;
@@ -40,10 +41,11 @@ public class StartScreen implements Screen {
         GridBagConstraints gbc = new GridBagConstraints();
 
         // 좌상단 제목
-        JLabel titleLabel = new JLabel("가제 맛있다");
+        JLabel titleLabel = new JLabel("CODE_ESCAPE");
         titleLabel.setFont(new Font("SansSerif", Font.BOLD, 40));
-        titleLabel.setForeground(new Color(240, 240, 240));
+        titleLabel.setForeground(new Color(255, 255, 255));
 
+        // 패딩
         gbc.gridx = 0;
         gbc.gridy = 0;
         gbc.gridwidth = 2;
@@ -62,9 +64,9 @@ public class StartScreen implements Screen {
         JButton scoreboardBtn = createStyledButton("점수판");
         JButton exitBtn = createStyledButton("종료");
 
-        startBtn.addActionListener(e -> showPlaceholder("시작"));
-        loadBtn.addActionListener(e -> showPlaceholder("불러오기"));
-        scoreboardBtn.addActionListener(e -> showPlaceholder("점수판"));
+        // startBtn.addActionListener();
+        loadBtn.addActionListener(e -> screenManager.show(ScreenType.LOAD));
+        // scoreboardBtn.addActionListener();
         exitBtn.addActionListener(e -> System.exit(0));
 
         buttonPanel.add(startBtn);
@@ -83,23 +85,17 @@ public class StartScreen implements Screen {
 
     }
 
+    // 버튼 메소드 이미지로 대체될 예정
     private JButton createStyledButton(String text) {
         JButton btn = new JButton(text);
         btn.setPreferredSize(new Dimension(240, 50));
         btn.setFont(new Font("SansSerif", Font.BOLD, 16));
         btn.setFocusPainted(false);
-        btn.setBackground(new Color(60, 60, 75));
-        btn.setForeground(new Color(240, 240, 240));
         btn.setOpaque(true);
         btn.setBorder(BorderFactory.createCompoundBorder(
                 new LineBorder(new Color(100, 100, 120), 1, true),
                 new EmptyBorder(5, 15, 5, 15)));
         return btn;
-    }
-
-    private void showPlaceholder(String featureName) {
-        JOptionPane.showMessageDialog(panel, featureName + " 안 만들었어요", "으악",
-                JOptionPane.INFORMATION_MESSAGE);
     }
 
     @Override
