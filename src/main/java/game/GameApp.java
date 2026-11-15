@@ -47,7 +47,7 @@ public class GameApp {
             UserService userService = new UserService();
 
             // 스크린매니저에 각 화면 등록, 등장
-            screenManager.register(ScreenType.START, new StartScreen(screenManager, userService));
+            screenManager.register(ScreenType.START, new StartScreen(screenManager));
             screenManager.register(ScreenType.LOAD, new LoadScreen(screenManager, userService));
             frame.add(mainContainer);
             frame.setVisible(true);
