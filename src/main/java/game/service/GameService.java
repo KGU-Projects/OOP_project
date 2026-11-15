@@ -28,7 +28,8 @@ public class GameService {
     private final SaveRepository saveRepository;
     private GameState state;
     private User currentUser;
-    /** 지금 풀고 있는 문제. 퀴즈가 안 열려 있으면 null */
+    /** 이번 게임에서 마지막으로 불러오거나 저장한 칸 번호. 0이면 없음 */
+    private int currentSlot;
     private Quiz currentQuiz;
     /** 그 문제를 낸 오브젝트(버튼 등). 퀴즈가 안 열려 있으면 null */
     private GameObject currentTarget;
@@ -46,6 +47,7 @@ public class GameService {
                     .orElseThrow(() -> new IllegalStateException("1스테이지 파일이 없습니다"));
         this.currentUser = user;
         this.state = new GameState(firstStage, MAX_HP, null);
+        this.currentSlot = 0;
         cancelQuiz();   // 이전 게임에서 열려 있던 퀴즈 메모 비우기
     }
 
@@ -57,7 +59,22 @@ public class GameService {
                 .orElseThrow(() -> new IllegalStateException("다음 스테이지 파일이 없습니다"));
         this.state = new GameState(stage, MAX_HP, save);
         this.currentUser = user;
+        this.currentSlot = slot;
         cancelQuiz();   // 이전 게임에서 열려 있던 퀴즈 메모 비우기
+    }
+
+    /** 게임 오버 시: 저장했다면? true. 마지막 저장 스테이지로 돌아가기 가능한지 확인 */
+    public boolean canRestartFromSave() {
+        return currentSlot != 0;
+    }
+
+    /** 게임 오버 시 저장: 마지막으로 쓴 스테이지 다시 불러오기 */
+    public boolean restartFromSave() {
+        if (!canRestartFromSave()) {
+            return false;
+        }
+        continueGame(currentUser, currentSlot);
+        return true;
     }
 
     /**현재 게임 상태, UI에서 사용 */
