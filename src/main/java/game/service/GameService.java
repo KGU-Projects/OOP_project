@@ -102,4 +102,10 @@ public class GameService {
         boolean isDead = state.isDead();
         return new AnswerResult(false, explanation, 0, WRONG_ANSWER_DAMAGE, isDead, 0, false);
     }
+
+    /** 퀴즈 취소: 열린 퀴즈 정보만 지우고 맵으로 */
+    public void cancelQuiz() {
+        currentQuiz = null;
+        currentTarget = null;
+    }
 }
