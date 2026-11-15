@@ -5,12 +5,14 @@ import game.model.GameState;
 import game.model.User;
 import game.repository.QuizRepository;
 import game.repository.StageRepository;
+import game.repository.SaveRepository;
 import game.model.quiz.Quiz;
 import game.model.object.GameObject;
 
 import java.util.Optional;
 import game.model.object.ButtonObject;
 import game.model.AnswerResult;
+import game.model.SaveData;
 
 
 /** UI와 데이터 사이 연결 및 게임 규칙 처리 */
@@ -23,6 +25,7 @@ public class GameService {
 
     private final QuizRepository quizRepository;
     private final StageRepository stageRepository;
+    private final SaveRepository saveRepository;
     private GameState state;
     private User currentUser;
     /** 지금 풀고 있는 문제. 퀴즈가 안 열려 있으면 null */
@@ -31,9 +34,10 @@ public class GameService {
     private GameObject currentTarget;
 
     /** 게임 시작할 수 있게 데이터 받아오기*/
-    public GameService(QuizRepository quizRepository, StageRepository stageRepository) {
+    public GameService(QuizRepository quizRepository, StageRepository stageRepository, SaveRepository saveRepository) {
         this.quizRepository = quizRepository;
         this.stageRepository = stageRepository;
+        this.saveRepository = saveRepository;
     }
 
     /** 새 게임: 1스테이지를 처음 상태로 시작하기 */
@@ -42,6 +46,18 @@ public class GameService {
                     .orElseThrow(() -> new IllegalStateException("1스테이지 파일이 없습니다"));
         this.currentUser = user;
         this.state = new GameState(firstStage, MAX_HP, null);
+        cancelQuiz();   // 이전 게임에서 열려 있던 퀴즈 메모 비우기
+    }
+
+    /** 불러오기: 마지막으로 깬 스테이지의 다음 스테이지 시작하기 */
+    public void continueGame(User user, int slot) {
+        SaveData save = saveRepository.find(user.getNickname(), slot)
+                .orElseThrow(() -> new IllegalStateException(slot + "번 저장 칸이 비어 있습니다"));
+        Stage stage = stageRepository.findByNumber(save.getNextStageNo())
+                .orElseThrow(() -> new IllegalStateException("다음 스테이지 파일이 없습니다"));
+        this.state = new GameState(stage, MAX_HP, save);
+        this.currentUser = user;
+        cancelQuiz();   // 이전 게임에서 열려 있던 퀴즈 메모 비우기
     }
 
     /**현재 게임 상태, UI에서 사용 */
