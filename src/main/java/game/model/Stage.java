@@ -109,4 +109,23 @@ public class Stage {
     public List<GameObject> getObjects() {
         return objects;
     }
+
+    /** 개발용 출력. 정보 한 줄, 지형, 오브젝트 목록 순이다. */
+    @Override
+    public String toString() {
+        StringBuilder out = new StringBuilder(String.format("[스테이지 %d] \"%s\" (%s, %s) %d x %d, 시작 (%d, %d)",
+                getNumber(), getTitle(), getConcept(), getType(), getWidth(), getHeight(),
+                getStartTileX(), getStartTileY()));
+        for (int y = 0; y < getHeight(); y++) {
+            out.append(System.lineSeparator()).append("    ");
+            for (int x = 0; x < getWidth(); x++) {
+                out.append(getTile(x, y).getSymbol());
+            }
+        }
+        for (GameObject object : getObjects()) {
+            out.append(String.format("%n    %s (%d, %d) %s", object.getId(), object.getX(), object.getY(),
+                    object.describe()));
+        }
+        return out.toString();
+    }
 }

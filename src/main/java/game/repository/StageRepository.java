@@ -12,4 +12,7 @@ public interface StageRepository {
     List<Stage> findAll();
 
     Optional<Stage> findByNumber(int stageNo);
+
+    /** 개발용: 읽은 내용을 보기 좋게 콘솔에 출력한다. 저장소가 파일을 제대로 읽는지 확인할 때 쓴다. */
+    void print();
 }
