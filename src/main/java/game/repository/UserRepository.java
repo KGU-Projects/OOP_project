@@ -25,4 +25,7 @@ public interface UserRepository {
      * 파일이나 폴더가 없으면 만든다. 닉네임이 중복된 목록은 IllegalArgumentException.
      */
     void saveAll(List<User> users);
+
+    /** 개발용: 읽은 내용을 보기 좋게 콘솔에 출력한다. 저장소가 파일을 제대로 읽는지 확인할 때 쓴다. */
+    void print();
 }

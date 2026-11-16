@@ -57,4 +57,11 @@ public class User {
     public LocalDateTime getLastPlayedAt() {
         return lastPlayedAt;
     }
+
+    /** 개발용 출력. 길이가 일정한 숫자를 앞에, 닉네임을 뒤에 두어 여러 줄을 찍어도 줄이 맞는다. */
+    @Override
+    public String toString() {
+        return String.format("최고점수 %6d | 클리어 %2d | 마지막 플레이 %s | %s",
+                highScore, clearedStages, String.valueOf(lastPlayedAt).replace('T', ' '), nickname);
+    }
 }
