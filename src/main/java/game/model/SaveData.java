@@ -73,4 +73,11 @@ public class SaveData {
     public LocalDateTime getSavedAt() {
         return savedAt;
     }
+
+    /** 개발용 출력. */
+    @Override
+    public String toString() {
+        return String.format("클리어 %d → 다음 %d스테이지 | 체력 %d | 점수 %d | 인벤토리 %s | 저장 %s",
+                clearedStage, getNextStageNo(), hp, score, inventory, String.valueOf(savedAt).replace('T', ' '));
+    }
 }

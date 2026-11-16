@@ -22,4 +22,7 @@ public interface SaveRepository {
 
     /** 슬롯을 비운다. 이미 비어 있으면 아무 일도 하지 않는다. */
     void delete(String nickname, int slot);
+
+    /** 개발용: 그 사용자의 모든 슬롯을 보기 좋게 콘솔에 출력한다. 빈 슬롯도 표시한다. */
+    void print(String nickname);
 }
