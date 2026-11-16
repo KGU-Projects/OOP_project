@@ -1,5 +1,7 @@
 package game.model.quiz;
 
+import java.util.stream.Collectors;
+
 /**
  * 문제의 공통 부분. 유형별 판정은 하위 클래스가 isCorrect로 맡는다.
  * 호출하는 쪽은 유형을 확인하지 않고 quiz.isCorrect(input)만 쓴다.
@@ -43,5 +45,12 @@ public abstract class Quiz {
 
     public String getExplanation() {
         return explanation;
+    }
+
+    /** 개발용 출력. 번호·유형과 문제 본문까지이고, 보기와 정답은 하위 클래스가 덧붙인다. */
+    @Override
+    public String toString() {
+        return String.format("[문제 %d] 스테이지 %d, %s%n", id, stageNo, getType())
+                + question.lines().map(line -> "    " + line).collect(Collectors.joining(System.lineSeparator()));
     }
 }
