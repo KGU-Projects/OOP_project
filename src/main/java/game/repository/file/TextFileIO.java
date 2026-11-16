@@ -5,6 +5,7 @@ import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -27,6 +28,23 @@ public final class TextFileIO {
         } catch (IOException e) {
             // UTF-8이 아닌 파일도 여기로 온다. 원인을 감춰 두지 않고 경로와 함께 다시 던진다.
             throw new UncheckedIOException("파일을 읽을 수 없습니다(UTF-8 확인): " + path, e);
+        }
+    }
+
+    /** 줄들을 UTF-8로 파일에 덮어쓴다. 부모 폴더가 없으면 만든다. 임시 파일에 먼저 쓴 뒤 옮겨서, 쓰다가 실패해도 원래 파일이 깨지지 않게 한다. */
+    public static void writeLines(Path path, List<String> lines) {
+        try {
+            Path parent = path.toAbsolutePath().getParent();
+            Files.createDirectories(parent);
+            Path temp = Files.createTempFile(parent, path.getFileName().toString(), ".tmp");
+            try {
+                Files.write(temp, lines, StandardCharsets.UTF_8);
+                Files.move(temp, path, StandardCopyOption.REPLACE_EXISTING);
+            } finally {
+                Files.deleteIfExists(temp);
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException("파일을 쓸 수 없습니다: " + path, e);
         }
     }
 }
