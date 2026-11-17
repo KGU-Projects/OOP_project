@@ -46,4 +46,15 @@ public class ChoiceQuiz extends Quiz {
             return false;   // 숫자가 아닌 입력은 오답으로 처리한다
         }
     }
+
+    /** 개발용 출력. 정답 보기에 *를 붙인다. */
+    @Override
+    public String toString() {
+        StringBuilder out = new StringBuilder(super.toString());
+        for (int i = 0; i < choices.size(); i++) {
+            String mark = (i + 1 == answerNo) ? "*" : " ";
+            out.append(String.format("%n  %s %d) %s", mark, i + 1, choices.get(i)));
+        }
+        return out.append(String.format("%n    해설: %s", getExplanation())).toString();
+    }
 }
