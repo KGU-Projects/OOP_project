@@ -138,6 +138,7 @@ public class LoadScreen extends BaseScreen {
         bottomPanel.add(new GameButton("불러오기", null));
 
         panel.add(bottomPanel, BorderLayout.SOUTH);
+        panel.setBorder(new EmptyBorder(40, 50, 40, 50));
     }
 
     // 값 받아서 갯수만큼 세이브 목록 설정
