@@ -61,7 +61,7 @@ public class StartScreen extends BaseScreen {
 
         // 좌측 버튼
         List<MenuItem> menuItems = List.of(
-                new MenuItem("시작화면 개념증명", () -> screenManager.show(ScreenType.PLACEHOLDER)),
+                new MenuItem("시작 개념실증", () -> screenManager.show(ScreenType.PLACEHOLDER)),
                 new MenuItem("시작", () -> screenManager.show(ScreenType.GAME)), // 추후에 올바른 커넥터로
                 new MenuItem("불러오기", () -> screenManager.show(ScreenType.LOAD)),
                 new MenuItem("점수화면", () -> screenManager.show(ScreenType.PLACEHOLDER)),
