@@ -11,20 +11,25 @@ import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
 import java.awt.CardLayout;
 import java.util.List;
+import java.util.Optional;
 
 /**
- * QuizScreen 단독 실행·테스트용 전투 진행기.
+ * QuizScreen 단독 실행·테스트용 데모.
  *
- * 데모용 문제 목록, 플레이어·몬스터 HP, 정답 판정(quiz.isCorrect), 승패 판정을 맡는다.
- * 전투가 끝나면 복귀 버튼을 '다시 플레이'로 보여 주고, onReturnRequested에서 전투를 처음부터 다시 시작한다.
- * 화면은 QuizScreen.QuizListener로만 연결되므로, 실제 게임에서는 이 클래스 대신
- * 게임 로직(GameService 등)이 같은 리스너를 구현하면 된다.
+ * 화면 흐름은 실제 게임과 같은 {@link QuizBattleController}가 맡고, 이 클래스는 그 컨트롤러에 넣는
+ * 데모용 전투 규칙({@link QuizBattleController.BattleRules})만 구현한다. 실제 게임에서는 이 자리에
+ * GameService를 감싼 규칙이 들어간다.
  *
- * 실행: 프로젝트 루트에서 컴파일 후 java -cp out game.ui.screens.QuizScreenDemo [제한시간초]
+ * 데모 규칙: 플레이어 HP 3, 몬스터 HP 3, 문제당 20초. 정답이면 몬스터 HP -1, 오답·시간 초과면 플레이어 HP -1.
+ * HP가 1이 되면 경고 팝업, 일시정지 버튼, HP 0이면 GAME OVER 팝업이 뜬다.
+ * 데모에는 맵·스테이지가 없으므로 화면을 떠나는 선택(승리 후 '다시 플레이', 전투 중단, 체력 보충, 재시작,
+ * 스테이지 선택)은 모두 즉시 재도전으로 처리한다 (HP를 처음 값으로 되돌린다).
+ *
+ * 실행: java -cp out game.ui.screens.QuizScreenDemo [제한시간초]
  */
-public final class QuizScreenDemo implements QuizScreen.QuizListener {
+public final class QuizScreenDemo implements QuizBattleController.BattleRules {
 
-    public static final int PLAYER_MAX_HP = 5;
+    public static final int PLAYER_MAX_HP = 3;
     public static final int MONSTER_MAX_HP = 3;
     public static final int TIME_LIMIT_SECONDS = 20;
     private static final String RETURN_BUTTON_TEXT = "다시 플레이";
@@ -36,17 +41,14 @@ public final class QuizScreenDemo implements QuizScreen.QuizListener {
         READY, IN_PROGRESS, VICTORY, DEFEAT
     }
 
-    private final QuizScreen screen;
     private final List<Quiz> quizzes;
-    private final int timeLimitSeconds;
+    private final QuizBattleController controller;
 
-    private BattleState battleState = BattleState.READY;
     private int playerHp;
     private int monsterHp;
     private int nextQuizIndex;
-    private int questionCount;
-    private Quiz currentQuiz;
-    private boolean awaitingAnswer;
+    private boolean started;
+    private QuizBattleController.ExitReason lastExitReason;
 
     public QuizScreenDemo(QuizScreen screen, List<Quiz> quizzes, int timeLimitSeconds) {
         if (screen == null) {
@@ -58,115 +60,79 @@ public final class QuizScreenDemo implements QuizScreen.QuizListener {
         if (timeLimitSeconds <= 0) {
             throw new IllegalArgumentException("timeLimitSeconds must be positive: " + timeLimitSeconds);
         }
-        this.screen = screen;
         this.quizzes = List.copyOf(quizzes);
-        this.timeLimitSeconds = timeLimitSeconds;
-        screen.setQuizListener(this);
+        // 데모는 어떤 이유로 화면을 떠나든 바로 다시 시작한다
+        this.controller = new QuizBattleController(screen, this, timeLimitSeconds, RETURN_BUTTON_TEXT,
+                reason -> {
+                    lastExitReason = reason;
+                    startBattle();
+                });
     }
 
-    /** HP를 초기화하고 첫 문제를 낸다. 전투 중에 다시 부르면 처음부터 다시 시작한다. */
+    /** HP와 문제 순서를 처음으로 되돌리고 전투를 시작한다. */
     public void startBattle() {
         playerHp = PLAYER_MAX_HP;
         monsterHp = MONSTER_MAX_HP;
         nextQuizIndex = 0;
-        questionCount = 0;
-        battleState = BattleState.IN_PROGRESS;
-
-        screen.resetBattle();
-        screen.setCombatantNames("사용자", "몬스터 (오류 버그)");
-        screen.updateHp(playerHp, PLAYER_MAX_HP, monsterHp, MONSTER_MAX_HP);
-        showNextQuiz();
+        started = true;
+        controller.start("사용자", "몬스터 (오류 버그)");
     }
 
     // ---------------------------------------------------------------------
-    // QuizScreen.QuizListener
+    // QuizBattleController.BattleRules (데모 규칙)
     // ---------------------------------------------------------------------
 
+    /** 목록을 순서대로 돌려 쓴다. 끝나면 처음부터 다시 내므로 문제가 모자라 멈추지 않는다. */
     @Override
-    public void onAnswerSubmitted(Quiz quiz, String answer) {
-        if (!acceptsResultFor(quiz)) {
-            return;
-        }
-        boolean correct = quiz.isCorrect(answer);
-        applyResult(correct ? QuizScreen.ResultType.CORRECT : QuizScreen.ResultType.WRONG);
-    }
-
-    @Override
-    public void onTimeExpired(Quiz quiz) {
-        if (!acceptsResultFor(quiz)) {
-            return;
-        }
-        applyResult(QuizScreen.ResultType.TIMEOUT);
-    }
-
-    @Override
-    public void onNextRequested() {
-        if (battleState != BattleState.IN_PROGRESS || awaitingAnswer) {
-            return;
-        }
-        showNextQuiz();
-    }
-
-    /** 데모에서는 복귀 버튼을 '다시 플레이'로 쓴다. 실제 게임에서는 맵/스테이지 화면으로 돌아가면 된다. */
-    @Override
-    public void onReturnRequested() {
-        if (battleState != BattleState.VICTORY && battleState != BattleState.DEFEAT) {
-            return;
-        }
-        startBattle();
-    }
-
-    // ---------------------------------------------------------------------
-    // 전투 규칙
-    // ---------------------------------------------------------------------
-
-    /** 진행 중인 전투의 현재 문제에 대해 아직 판정하지 않았을 때만 결과를 받는다 (중복 판정 방지). */
-    private boolean acceptsResultFor(Quiz quiz) {
-        return battleState == BattleState.IN_PROGRESS && awaitingAnswer && quiz == currentQuiz;
-    }
-
-    private void applyResult(QuizScreen.ResultType type) {
-        awaitingAnswer = false;
-
-        String detail;
-        if (type == QuizScreen.ResultType.CORRECT) {
-            monsterHp = Math.max(0, monsterHp - 1);
-            detail = "반격 성공! 몬스터 HP -1";
-        } else if (type == QuizScreen.ResultType.WRONG) {
-            playerHp = Math.max(0, playerHp - 1);
-            detail = "방어 실패! 사용자 HP -1";
-        } else {
-            playerHp = Math.max(0, playerHp - 1);
-            detail = "제한시간 " + timeLimitSeconds + "초가 지났습니다. 사용자 HP -1";
-        }
-        screen.updateHp(playerHp, PLAYER_MAX_HP, monsterHp, MONSTER_MAX_HP);
-
-        if (monsterHp <= 0) {
-            battleState = BattleState.VICTORY;
-        } else if (playerHp <= 0) {
-            battleState = BattleState.DEFEAT;
-        }
-
-        boolean battleOver = battleState != BattleState.IN_PROGRESS;
-        screen.showResult(type, detail, !battleOver);
-        if (battleState == BattleState.VICTORY) {
-            screen.showBattleEnd(true, "몬스터를 쓰러뜨렸습니다.", RETURN_BUTTON_TEXT);
-        } else if (battleState == BattleState.DEFEAT) {
-            screen.showBattleEnd(false, "체력이 모두 소진되었습니다.", RETURN_BUTTON_TEXT);
-        }
-    }
-
-    /** 문제는 목록을 순서대로 돌려 쓴다. 목록이 끝나면 처음부터 다시 내므로 문제가 모자라 멈추지 않는다. */
-    private void showNextQuiz() {
-        currentQuiz = quizzes.get(nextQuizIndex % quizzes.size());
+    public Optional<Quiz> nextQuiz() {
+        Quiz quiz = quizzes.get(nextQuizIndex % quizzes.size());
         nextQuizIndex++;
-        questionCount++;
-        awaitingAnswer = true;
-        screen.showQuiz(currentQuiz, questionCount, timeLimitSeconds);
+        return Optional.of(quiz);
     }
+
+    @Override
+    public QuizBattleController.Judgement submitAnswer(Quiz quiz, String answer) {
+        if (quiz.isCorrect(answer)) {
+            monsterHp = Math.max(0, monsterHp - 1);
+            return new QuizBattleController.Judgement(true, 0, 1, false, monsterHp == 0);
+        }
+        return damagePlayer();
+    }
+
+    @Override
+    public QuizBattleController.Judgement timeOut(Quiz quiz) {
+        return damagePlayer();
+    }
+
+    @Override
+    public QuizBattleController.HpView hp() {
+        return new QuizBattleController.HpView(playerHp, PLAYER_MAX_HP, monsterHp, MONSTER_MAX_HP);
+    }
+
+    private QuizBattleController.Judgement damagePlayer() {
+        playerHp = Math.max(0, playerHp - 1);
+        return new QuizBattleController.Judgement(false, 1, 0, playerHp == 0, false);
+    }
+
+    // ---------------------------------------------------------------------
+    // 상태 조회 (테스트용)
+    // ---------------------------------------------------------------------
 
     public BattleState getBattleState() {
-        return battleState;
+        if (!started) {
+            return BattleState.READY;
+        }
+        QuizBattleController.Outcome outcome = controller.getOutcome();
+        if (outcome == QuizBattleController.Outcome.VICTORY) {
+            return BattleState.VICTORY;
+        }
+        if (outcome == QuizBattleController.Outcome.DEFEAT) {
+            return BattleState.DEFEAT;
+        }
+        if (outcome != null) {
+            return BattleState.READY; // 중단·후퇴·문제 없음: 곧 재시작된다
+        }
+        return BattleState.IN_PROGRESS;
     }
 
     public int getPlayerHp() {
@@ -178,11 +144,21 @@ public final class QuizScreenDemo implements QuizScreen.QuizListener {
     }
 
     public Quiz getCurrentQuiz() {
-        return currentQuiz;
+        return controller.getCurrentQuiz();
+    }
+
+    /** 마지막으로 화면을 떠난 이유 (아직 없으면 null) */
+    public QuizBattleController.ExitReason getLastExitReason() {
+        return lastExitReason;
     }
 
     public int getQuestionCount() {
-        return questionCount;
+        return controller.getQuestionCount();
+    }
+
+    /** 화면 이벤트를 받는 컨트롤러 (테스트에서 중복 이벤트를 직접 보낼 때 사용) */
+    public QuizBattleController getController() {
+        return controller;
     }
 
     // ---------------------------------------------------------------------
@@ -335,6 +311,7 @@ public final class QuizScreenDemo implements QuizScreen.QuizListener {
                         List.of("0", "10", "5", "컴파일 오류"),
                         2));
     }
+
 
     // ---------------------------------------------------------------------
     // 독립 실행
