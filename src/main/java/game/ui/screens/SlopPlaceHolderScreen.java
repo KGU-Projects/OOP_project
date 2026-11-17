@@ -60,7 +60,7 @@ import java.util.function.IntFunction;
  * 
  * AI딸깎으로 만들었으니 추후에 제거바람
  */
-public class GameScreen extends BaseScreen {
+public class SlopPlaceHolderScreen extends BaseScreen {
 
     /** 나중에 QuizScreen / UserService를 연결하기 위한 콜백 인터페이스 */
     public interface GameListener {
@@ -119,13 +119,13 @@ public class GameScreen extends BaseScreen {
     private final Timer gameLoop;
 
     /** 단독 테스트 및 기본 등록용 생성자 */
-    public GameScreen(ScreenManager screenManager) {
+    public SlopPlaceHolderScreen(ScreenManager screenManager) {
         this(screenManager, createDemoStage(), createDemoQuizzes()::get, new GameListener() {
         }, false, null);
     }
 
     /** ESC 메뉴 복귀 동작만 간단히 지정할 때 사용하는 생성자 */
-    public GameScreen(ScreenManager screenManager, Runnable onExitToMenu) {
+    public SlopPlaceHolderScreen(ScreenManager screenManager, Runnable onExitToMenu) {
         this(screenManager, createDemoStage(), createDemoQuizzes()::get, new GameListener() {
             @Override
             public void onExitToMenu() {
@@ -136,7 +136,7 @@ public class GameScreen extends BaseScreen {
         }, false, null);
     }
 
-    public GameScreen(ScreenManager screenManager,
+    public SlopPlaceHolderScreen(ScreenManager screenManager,
             Stage stage,
             IntFunction<Quiz> quizProvider,
             GameListener listener,

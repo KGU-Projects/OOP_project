@@ -39,8 +39,6 @@ public class FileStageRepository implements StageRepository {
     private static final Pattern STAGE_FILE_PATTERN = Pattern.compile("stage(\\d{1,6})\\.txt");
     private static final Pattern OBJECT_ID_PATTERN = Pattern.compile("[A-Za-z0-9_]+");
 
-    private static final String FIELD_DELIMITER = "\\|";
-    private static final String LIST_DELIMITER = ",";
 
     private static final int HEADER_FIELD_COUNT = 7;       // 번호|제목|개념|유형|테마|가로|세로
     private static final int OBJECT_COMMON_FIELD_COUNT = 4; // ID|종류|x|y
@@ -74,6 +72,13 @@ public class FileStageRepository implements StageRepository {
             return Optional.empty();
         }
         return Optional.of(parse(file));
+    }
+
+    @Override
+    public void print() {
+        List<Stage> stages = findAll();
+        System.out.println("=== 스테이지 (" + directory + ") " + stages.size() + "개 ===");
+        stages.forEach(System.out::println);
     }
 
     // ---- 파일 목록 ----
@@ -241,7 +246,7 @@ public class FileStageRepository implements StageRepository {
             case BUTTON: {
                 reader.requireFieldCount(fields, OBJECT_COMMON_FIELD_COUNT + 2, "BUTTON 줄(문제ID, 열 문ID 목록)");
                 int quizId = reader.parseInt(fields[4], "문제ID", 1);
-                List<String> doorIds = Arrays.stream(fields[5].split(LIST_DELIMITER, -1)).map(String::trim).toList();
+                List<String> doorIds = Arrays.stream(fields[5].split(RecordParser.LIST_DELIMITER, -1)).map(String::trim).toList();
                 if (doorIds.stream().anyMatch(String::isEmpty)) {
                     throw reader.error("BUTTON의 열 문ID 목록이 비어 있거나 ','가 잘못 쓰였습니다");
                 }
@@ -315,7 +320,7 @@ public class FileStageRepository implements StageRepository {
         }
 
         String[] nextFields(String what) {
-            return nextLine(what).split(FIELD_DELIMITER, -1);   // -1: 끝의 빈 칸을 지우지 않는다
+            return nextLine(what).split(RecordParser.FIELD_SPLIT, -1);   // -1: 끝의 빈 칸을 지우지 않는다
         }
 
         void requireFieldCount(String[] fields, int expected, String what) {

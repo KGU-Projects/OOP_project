@@ -26,4 +26,10 @@ public class InputQuiz extends Quiz {
     public boolean isCorrect(String input) {
         return input != null && answer.equalsIgnoreCase(input.trim());
     }
+
+    /** 개발용 출력. */
+    @Override
+    public String toString() {
+        return super.toString() + String.format("%n    정답: %s%n    해설: %s", answer, getExplanation());
+    }
 }
