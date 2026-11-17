@@ -7,5 +7,6 @@ public enum ScreenType {
     LOAD,
     GAME,
     PAUSE,
-    QUIZ
+    QUIZ,
+    PLACEHOLDER
 }

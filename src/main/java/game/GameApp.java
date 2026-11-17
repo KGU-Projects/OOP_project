@@ -1,7 +1,7 @@
 package game;
 
 import game.ui.ScreenManager;
-import game.ui.screens.GameScreen;
+import game.ui.screens.SlopPlaceHolderScreen;
 import game.ui.screens.LoadScreen;
 import game.ui.screens.StartScreen;
 import game.service.UserService;
@@ -51,7 +51,7 @@ public class GameApp {
             screenManager.register(ScreenType.START, new StartScreen(screenManager));
             screenManager.register(ScreenType.LOAD, new LoadScreen(screenManager, userService));
             screenManager.register(ScreenType.GAME,
-                    new GameScreen(screenManager, () -> screenManager.show(ScreenType.GAME)));
+                    new SlopPlaceHolderScreen(screenManager, () -> screenManager.show(ScreenType.GAME)));
             frame.add(mainContainer);
             frame.setVisible(true);
             screenManager.show(ScreenType.START);
