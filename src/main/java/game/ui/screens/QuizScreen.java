@@ -42,7 +42,9 @@ import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
 import java.awt.geom.Path2D;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.regex.Pattern;
 
 /**
  * 퀴즈 전투 화면. 화면 표시와 사용자 입력만 맡는다.
@@ -51,7 +53,7 @@ import java.util.List;
  * (지금은 {@link QuizScreenDemo}, 나중에는 실제 게임 로직)이 맡는다.
  *
  * 흐름: showQuiz → (사용자 제출 또는 시간 초과) → 리스너가 판정 → showResult → '다음 문제' 클릭 → 리스너가 showQuiz
- * 또는 전투가 끝나면 showBattleEnd.
+ * 또는 전투가 끝나면 showBattleEnd → '돌아가기'(데모: '다시 플레이') 클릭 → onReturnRequested.
  */
 public class QuizScreen extends BaseScreen {
 
@@ -65,6 +67,13 @@ public class QuizScreen extends BaseScreen {
 
         /** 결과 확인 후 '다음 문제' 버튼을 눌렀다. */
         void onNextRequested();
+
+        /**
+         * 전투가 끝난 뒤 복귀 버튼을 눌렀다. 실제 게임에서는 맵/스테이지 화면으로 돌아가고,
+         * 독립 데모에서는 전투를 처음부터 다시 시작한다. 버튼은 한 번만 눌린다.
+         */
+        default void onReturnRequested() {
+        }
     }
 
     /** 한 문제의 결과 종류 */
@@ -112,6 +121,11 @@ public class QuizScreen extends BaseScreen {
 
     private static final int TIMER_TICK_MS = 100;
     private static final int WARNING_SECONDS = 5;
+    /** 문제 문장은 이 줄 수까지 보이고 넘치면 스크롤 */
+    private static final int QUESTION_MAX_LINES = 4;
+    /** 결과·해설은 이 줄 수까지 보이고 넘치면 스크롤 */
+    private static final int RESULT_MAX_LINES = 5;
+    private static final String DEFAULT_RETURN_TEXT = "돌아가기";
 
     private QuizListener listener;
     private Phase phase = Phase.READY;
@@ -134,6 +148,7 @@ public class QuizScreen extends BaseScreen {
 
     // 문제 카드
     private final JTextArea questionArea = createWrappingText(new Font("SansSerif", Font.BOLD, 19), TEXT_DARK);
+    private final JScrollPane questionScroll = createCappedScroll(questionArea, QUESTION_MAX_LINES);
     private final JTextArea codeArea = new JTextArea();
     private final JScrollPane codeScroll = new JScrollPane(codeArea);
     private final JPanel filler = new JPanel();
@@ -151,8 +166,10 @@ public class QuizScreen extends BaseScreen {
     private final JPanel resultPanel = new JPanel(new BorderLayout(0, 6));
     private final JLabel resultTitle = new JLabel(" ");
     private final JTextArea resultDetail = createWrappingText(new Font("SansSerif", Font.PLAIN, 15), TEXT_DARK);
+    private final JScrollPane resultScroll = createCappedScroll(resultDetail, RESULT_MAX_LINES);
     private final JLabel endLabel = new JLabel(" ", SwingConstants.CENTER);
     private final GameButton nextButton;
+    private final GameButton returnButton;
 
     public QuizScreen(ScreenManager screenManager) {
         super(screenManager, new BorderLayout(18, 12));
@@ -162,6 +179,7 @@ public class QuizScreen extends BaseScreen {
         choiceSubmitButton = new GameButton("제출", this::submitSelectedChoice);
         inputSubmitButton = new GameButton("제출", this::submitInput);
         nextButton = new GameButton("다음 문제", this::requestNext);
+        returnButton = new GameButton(DEFAULT_RETURN_TEXT, this::requestReturn);
 
         countdown = new Timer(TIMER_TICK_MS, e -> onTimerTick());
 
@@ -218,6 +236,7 @@ public class QuizScreen extends BaseScreen {
 
         QuestionParts parts = splitQuestion(quiz.getQuestion());
         questionArea.setText("Q. " + parts.prompt());
+        questionArea.setCaretPosition(0);
         boolean hasCode = !parts.code().isEmpty();
         codeArea.setText(parts.code());
         codeArea.setCaretPosition(0);
@@ -237,6 +256,7 @@ public class QuizScreen extends BaseScreen {
 
         refreshLayout();
         SwingUtilities.invokeLater(() -> {
+            refreshLayout(); // 줄바꿈 높이는 폭이 정해진 뒤에 계산되므로 한 번 더 배치
             if (currentQuiz instanceof ChoiceQuiz) {
                 panel.requestFocusInWindow();
             } else {
@@ -274,19 +294,30 @@ public class QuizScreen extends BaseScreen {
         String explanation = currentQuiz.getExplanation();
         sb.append("해설: ").append(explanation.isBlank() ? "(해설 없음)" : explanation);
         resultDetail.setText(sb.toString());
+        resultDetail.setCaretPosition(0);
         resultPanel.setVisible(true);
 
         nextButton.setVisible(showNext);
         nextButton.setEnabled(showNext);
         phase = Phase.SHOWING_RESULT;
         refreshLayout();
+        SwingUtilities.invokeLater(this::refreshLayout);
         if (showNext) {
             SwingUtilities.invokeLater(nextButton::requestFocusInWindow);
         }
     }
 
-    /** 전투 종료 표시. 이후 답안 제출과 다음 문제 진행을 모두 막는다. */
+    /** 전투 종료 표시. 복귀 버튼 문구는 '돌아가기'. */
     public void showBattleEnd(boolean victory, String message) {
+        showBattleEnd(victory, message, DEFAULT_RETURN_TEXT);
+    }
+
+    /**
+     * 전투 종료 표시. 이후 답안 제출과 다음 문제 진행을 모두 막고 복귀 버튼만 보여 준다.
+     *
+     * @param returnButtonText 복귀 버튼 문구 (예: "돌아가기", "다시 플레이")
+     */
+    public void showBattleEnd(boolean victory, String message, String returnButtonText) {
         stopCountdown();
         setInputsEnabled(false);
         nextButton.setVisible(false);
@@ -295,8 +326,13 @@ public class QuizScreen extends BaseScreen {
         endLabel.setForeground(victory ? new Color(255, 215, 90) : new Color(255, 120, 120));
         endLabel.setVisible(true);
         stageLabel.setText(victory ? "전투 승리" : "전투 패배");
+        returnButton.setText(returnButtonText == null || returnButtonText.isBlank()
+                ? DEFAULT_RETURN_TEXT : returnButtonText);
+        returnButton.setVisible(true);
+        returnButton.setEnabled(true);
         phase = Phase.FINISHED;
         refreshLayout();
+        SwingUtilities.invokeLater(returnButton::requestFocusInWindow);
     }
 
     /** 새 전투를 시작할 수 있도록 화면을 처음 상태로 되돌린다. */
@@ -306,9 +342,12 @@ public class QuizScreen extends BaseScreen {
         phase = Phase.READY;
         resetQuestionView();
         questionArea.setText(" ");
+        codeArea.setText("");
         codeScroll.setVisible(false);
         filler.setVisible(true);
+        stageLabel.setText(" ");
         timerLabel.setText(" ");
+        timerLabel.setForeground(TIMER_NORMAL);
         timeBar.setValue(0);
         refreshLayout();
     }
@@ -388,6 +427,17 @@ public class QuizScreen extends BaseScreen {
         nextButton.setEnabled(false);
         if (listener != null) {
             listener.onNextRequested();
+        }
+    }
+
+    /** 전투 종료 후 복귀 버튼. FINISHED 단계에서 한 번만 리스너로 전달된다. */
+    private void requestReturn() {
+        if (phase != Phase.FINISHED || !returnButton.isEnabled()) {
+            return;
+        }
+        returnButton.setEnabled(false);
+        if (listener != null) {
+            listener.onReturnRequested();
         }
     }
 
@@ -558,7 +608,8 @@ public class QuizScreen extends BaseScreen {
         c.gridy = 0;
         c.insets = new Insets(0, 0, 10, 0);
         questionArea.setName("questionArea");
-        card.add(questionArea, c);
+        questionScroll.setName("questionScroll");
+        card.add(questionScroll, c);
 
         // 1: 코드 (줄바꿈·들여쓰기 유지, 스크롤)
         codeArea.setName("codeArea");
@@ -598,13 +649,14 @@ public class QuizScreen extends BaseScreen {
         resultTitle.setFont(new Font("SansSerif", Font.BOLD, 20));
         resultDetail.setName("resultDetail");
         resultDetail.setRows(0);
+        resultScroll.setName("resultScroll");
         resultPanel.add(resultTitle, BorderLayout.NORTH);
-        resultPanel.add(resultDetail, BorderLayout.CENTER);
+        resultPanel.add(resultScroll, BorderLayout.CENTER);
         card.add(resultPanel, c);
 
-        // 4: 전투 종료 문구 / 다음 문제 버튼
+        // 4: 전투 종료 문구 + 복귀 버튼 / 다음 문제 버튼
         c.gridy = 4;
-        JPanel bottom = new JPanel(new BorderLayout());
+        JPanel bottom = new JPanel(new BorderLayout(10, 0));
         bottom.setOpaque(false);
         endLabel.setName("endLabel");
         endLabel.setFont(new Font("SansSerif", Font.BOLD, 26));
@@ -612,6 +664,8 @@ public class QuizScreen extends BaseScreen {
         endLabel.setBackground(new Color(45, 35, 80));
         endLabel.setBorder(new EmptyBorder(10, 10, 10, 10));
         bottom.add(endLabel, BorderLayout.CENTER);
+        returnButton.setName("returnButton");
+        bottom.add(returnButton, BorderLayout.EAST);
         JPanel nextHolder = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
         nextHolder.setOpaque(false);
         nextButton.setName("nextButton");
@@ -729,6 +783,8 @@ public class QuizScreen extends BaseScreen {
         endLabel.setVisible(false);
         nextButton.setVisible(false);
         nextButton.setEnabled(false);
+        returnButton.setVisible(false);
+        returnButton.setEnabled(false);
         choiceSubmitButton.setEnabled(false);
     }
 
@@ -750,23 +806,125 @@ public class QuizScreen extends BaseScreen {
     // 텍스트 도우미
     // ---------------------------------------------------------------------
 
-    private record QuestionParts(String prompt, String code) {
+    record QuestionParts(String prompt, String code) {
     }
 
-    /** 첫 줄은 문제 문장, 둘째 줄부터는 코드로 보고 줄바꿈과 들여쓰기를 그대로 둔다. */
-    private static QuestionParts splitQuestion(String question) {
+    /**
+     * 문제를 설명 문장과 코드로 나눈다.
+     *
+     * 코드처럼 보이는 첫 줄부터 마지막 줄까지를 코드 블록으로 보고 줄바꿈·들여쓰기를 그대로 둔다.
+     * 코드 앞의 설명은 문제 문장이 되고, 코드 뒤에 오는 설명(예: "위 코드의 출력은?")은 문제 문장 끝에 붙인다.
+     * 코드처럼 보이는 줄이 없으면 여러 줄이라도 전부 설명 문장으로 표시한다.
+     */
+    static QuestionParts splitQuestion(String question) {
         String normalized = question.replace("\r\n", "\n").replace('\r', '\n');
-        int newline = normalized.indexOf('\n');
-        if (newline < 0) {
-            return new QuestionParts(normalized.strip(), "");
+        String[] lines = normalized.split("\n", -1);
+        int firstCode = -1;
+        int lastCode = -1;
+        for (int i = 0; i < lines.length; i++) {
+            if (isCodeLine(lines[i])) {
+                if (firstCode < 0) {
+                    firstCode = i;
+                }
+                lastCode = i;
+            }
         }
-        String prompt = normalized.substring(0, newline).strip();
-        String code = normalized.substring(newline + 1).stripTrailing();
-        // 앞쪽의 빈 줄만 지우고 첫 코드 줄의 들여쓰기는 남긴다
-        while (code.startsWith("\n")) {
-            code = code.substring(1);
+        if (firstCode < 0) {
+            return new QuestionParts(joinProse(lines, 0, lines.length), "");
         }
+        String before = joinProse(lines, 0, firstCode);
+        String after = joinProse(lines, lastCode + 1, lines.length);
+        String prompt = before.isEmpty() ? after : (after.isEmpty() ? before : before + "\n" + after);
+        String code = String.join("\n", Arrays.copyOfRange(lines, firstCode, lastCode + 1)).stripTrailing();
         return new QuestionParts(prompt, code);
+    }
+
+    private static final Pattern CODE_START = Pattern.compile(
+            "^(public|private|protected|static|final|abstract|class|interface|enum|import|package|return"
+                    + "|new|try|else|case|default|break|continue|throw)\\b.*"
+                    + "|^(if|for|while|switch|catch)\\s*\\(.*"
+                    + "|^[A-Za-z_][\\w.<>\\[\\], ]*\\s+[A-Za-z_]\\w*\\s*(=[^=].*|;.*|\\(.*)"
+                    + "|^[A-Za-z_][\\w.\\[\\]]*\\s*(=[^=]|\\+\\+|--|\\+=|-=).*"
+                    + "|^[A-Za-z_][\\w]*(\\.[A-Za-z_]\\w*)+\\s*\\(.*");
+
+    /** 코드 줄인지 추정한다. 한글 설명 문장은 따옴표 밖에 한글이 있으면 코드로 보지 않는다(주석·세미콜론 줄 제외). */
+    static boolean isCodeLine(String line) {
+        String t = line.strip();
+        if (t.isEmpty()) {
+            return false;
+        }
+        if (t.startsWith("//") || t.startsWith("/*") || t.startsWith("*/") || t.startsWith("@")) {
+            return true;
+        }
+        t = stripTrailingComment(t); // 예: acc.withdraw(2000);  // 실패
+        if (t.isEmpty()) {
+            return true;
+        }
+        if (t.endsWith(";") || t.endsWith("{") || t.endsWith("}")) {
+            return true;
+        }
+        boolean hangul = containsHangulOutsideQuotes(t);
+        if (hangul) {
+            return false;
+        }
+        if (CODE_START.matcher(t).matches()) {
+            return true;
+        }
+        // 들여쓴 줄에 코드 기호가 있으면 코드 (예: 줄이 나뉜 메서드 인자)
+        return Character.isWhitespace(line.charAt(0)) && t.matches(".*[(){}\\[\\];=].*");
+    }
+
+    /** 따옴표 밖의 // 주석을 떼어 낸다. */
+    private static String stripTrailingComment(String s) {
+        boolean inString = false;
+        boolean inChar = false;
+        for (int i = 0; i < s.length(); i++) {
+            char ch = s.charAt(i);
+            if (ch == '\\' && (inString || inChar)) {
+                i++;
+                continue;
+            }
+            if (ch == '"' && !inChar) {
+                inString = !inString;
+            } else if (ch == '\'' && !inString) {
+                inChar = !inChar;
+            } else if (!inString && !inChar && ch == '/' && i + 1 < s.length() && s.charAt(i + 1) == '/') {
+                return s.substring(0, i).strip();
+            }
+        }
+        return s;
+    }
+
+    private static boolean containsHangulOutsideQuotes(String s) {
+        boolean inString = false;
+        boolean inChar = false;
+        for (int i = 0; i < s.length(); i++) {
+            char ch = s.charAt(i);
+            if (ch == '\\' && (inString || inChar)) {
+                i++;
+                continue;
+            }
+            if (ch == '"' && !inChar) {
+                inString = !inString;
+            } else if (ch == '\'' && !inString) {
+                inChar = !inChar;
+            } else if (!inString && !inChar && ch >= '\uAC00' && ch <= '\uD7A3') {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** 설명 줄들을 합친다. 앞뒤 빈 줄은 지우고 각 줄의 앞뒤 공백만 정리한다. */
+    private static String joinProse(String[] lines, int from, int to) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = from; i < to; i++) {
+            String t = lines[i].strip();
+            if (sb.length() > 0 || !t.isEmpty()) {
+                sb.append(t).append('\n');
+            }
+        }
+        return sb.toString().strip();
     }
 
     private static String correctAnswerText(Quiz quiz) {
@@ -787,6 +945,31 @@ public class QuizScreen extends BaseScreen {
 
     private static String escapeHtml(String s) {
         return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;");
+    }
+
+    /**
+     * 줄바꿈 텍스트를 감싸는 세로 스크롤. 내용이 maxLines 줄 이하면 그 높이만 차지하고,
+     * 넘치면 maxLines 줄 높이로 고정한 채 스크롤한다. 배경은 투명하게 두어 기존 디자인을 유지한다.
+     */
+    private static JScrollPane createCappedScroll(JTextArea area, int maxLines) {
+        JScrollPane scroll = new JScrollPane(area,
+                JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED, JScrollPane.HORIZONTAL_SCROLLBAR_NEVER) {
+            private static final long serialVersionUID = 1L;
+
+            @Override
+            public Dimension getPreferredSize() {
+                Dimension d = super.getPreferredSize();
+                int lineHeight = area.getFontMetrics(area.getFont()).getHeight();
+                Insets in = getInsets();
+                int cap = lineHeight * maxLines + in.top + in.bottom;
+                return new Dimension(d.width, Math.min(d.height, cap));
+            }
+        };
+        scroll.setBorder(null);
+        scroll.setOpaque(false);
+        scroll.getViewport().setOpaque(false);
+        scroll.getVerticalScrollBar().setUnitIncrement(16);
+        return scroll;
     }
 
     private static JTextArea createWrappingText(Font font, Color color) {

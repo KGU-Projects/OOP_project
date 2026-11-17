@@ -16,6 +16,7 @@ import java.util.List;
  * QuizScreen 단독 실행·테스트용 전투 진행기.
  *
  * 데모용 문제 목록, 플레이어·몬스터 HP, 정답 판정(quiz.isCorrect), 승패 판정을 맡는다.
+ * 전투가 끝나면 복귀 버튼을 '다시 플레이'로 보여 주고, onReturnRequested에서 전투를 처음부터 다시 시작한다.
  * 화면은 QuizScreen.QuizListener로만 연결되므로, 실제 게임에서는 이 클래스 대신
  * 게임 로직(GameService 등)이 같은 리스너를 구현하면 된다.
  *
@@ -26,6 +27,7 @@ public final class QuizScreenDemo implements QuizScreen.QuizListener {
     public static final int PLAYER_MAX_HP = 5;
     public static final int MONSTER_MAX_HP = 3;
     public static final int TIME_LIMIT_SECONDS = 20;
+    private static final String RETURN_BUTTON_TEXT = "다시 플레이";
 
     private static final int WINDOW_WIDTH = 1280;
     private static final int WINDOW_HEIGHT = 720;
@@ -105,6 +107,15 @@ public final class QuizScreenDemo implements QuizScreen.QuizListener {
         showNextQuiz();
     }
 
+    /** 데모에서는 복귀 버튼을 '다시 플레이'로 쓴다. 실제 게임에서는 맵/스테이지 화면으로 돌아가면 된다. */
+    @Override
+    public void onReturnRequested() {
+        if (battleState != BattleState.VICTORY && battleState != BattleState.DEFEAT) {
+            return;
+        }
+        startBattle();
+    }
+
     // ---------------------------------------------------------------------
     // 전투 규칙
     // ---------------------------------------------------------------------
@@ -139,9 +150,9 @@ public final class QuizScreenDemo implements QuizScreen.QuizListener {
         boolean battleOver = battleState != BattleState.IN_PROGRESS;
         screen.showResult(type, detail, !battleOver);
         if (battleState == BattleState.VICTORY) {
-            screen.showBattleEnd(true, "몬스터를 쓰러뜨렸습니다.");
+            screen.showBattleEnd(true, "몬스터를 쓰러뜨렸습니다.", RETURN_BUTTON_TEXT);
         } else if (battleState == BattleState.DEFEAT) {
-            screen.showBattleEnd(false, "체력이 모두 소진되었습니다.");
+            screen.showBattleEnd(false, "체력이 모두 소진되었습니다.", RETURN_BUTTON_TEXT);
         }
     }
 
@@ -237,12 +248,67 @@ public final class QuizScreenDemo implements QuizScreen.QuizListener {
                                 + "speak()는 실제 객체의 오버라이딩된 메서드가 실행됩니다(다형성).",
                         List.of("0", "1", "2", "4"),
                         3),
+                new ChoiceQuiz(908, 1,
+                        "다음 설명을 모두 만족하는 객체지향 개념을 고르시오.\n"
+                                + "- 클래스의 필드를 private으로 숨긴다.\n"
+                                + "- 외부에서는 getter와 setter 같은 공개 메서드로만 값을 다룬다.\n"
+                                + "- 잘못된 값이 들어오지 않도록 메서드 안에서 검사할 수 있다.",
+                        "데이터와 그 데이터를 다루는 메서드를 하나로 묶고, 내부 구현을 감추는 것을 캡슐화라고 합니다.",
+                        List.of("상속", "캡슐화", "다형성", "추상화"),
+                        2),
                 new InputQuiz(904, 1,
                         "EBook이 Book을 상속하도록 빈칸에 들어갈 키워드를 쓰시오.\n"
                                 + "class Book { }\n"
                                 + "class EBook ______ Book { }",
                         "클래스를 상속할 때는 class 서브클래스 extends 슈퍼클래스 형태로 씁니다.",
                         "extends"),
+                new InputQuiz(909, 1,
+                        "은행 계좌 클래스 Account가 있다. 생성자는 처음 잔액을 받고, deposit()은 입금, withdraw()는 출금을 하며, "
+                                + "잔액보다 큰 금액을 출금하려 하면 출금하지 않고 false를 돌려준다. 출금에 성공하면 true를 돌려준다. "
+                                + "main()에서 여러 번 입금·출금을 한 뒤 마지막 잔액을 출력할 때, 출력되는 값을 숫자로 쓰시오. "
+                                + "(출금 실패는 잔액에 영향을 주지 않는다.)\n"
+                                + "class Account {\n"
+                                + "    private int balance;\n"
+                                + "\n"
+                                + "    Account(int balance) {\n"
+                                + "        this.balance = balance;\n"
+                                + "    }\n"
+                                + "\n"
+                                + "    void deposit(int amount) {\n"
+                                + "        balance += amount;\n"
+                                + "    }\n"
+                                + "\n"
+                                + "    boolean withdraw(int amount) {\n"
+                                + "        if (amount > balance) {\n"
+                                + "            return false;\n"
+                                + "        }\n"
+                                + "        balance -= amount;\n"
+                                + "        return true;\n"
+                                + "    }\n"
+                                + "\n"
+                                + "    int getBalance() {\n"
+                                + "        return balance;\n"
+                                + "    }\n"
+                                + "}\n"
+                                + "\n"
+                                + "public class Main {\n"
+                                + "    public static void main(String[] args) {\n"
+                                + "        Account acc = new Account(1000);\n"
+                                + "        acc.deposit(500);          // 1500\n"
+                                + "        acc.withdraw(2000);        // 실패\n"
+                                + "        acc.withdraw(700);         // 800\n"
+                                + "        acc.deposit(200);\n"
+                                + "        System.out.println(acc.getBalance());\n"
+                                + "    }\n"
+                                + "}\n"
+                                + "위 코드의 출력 결과는?",
+                        "처음 잔액 1000원에 500원을 입금하면 1500원이 됩니다. 2000원 출금은 잔액보다 커서 withdraw()가 false를 돌려주고 "
+                                + "잔액은 그대로 1500원입니다. 이어서 700원을 출금하면 800원, 마지막으로 200원을 입금하면 1000원이 됩니다. "
+                                + "balance 필드는 private이라 main()에서 직접 바꿀 수 없고, 반드시 deposit()과 withdraw()를 거쳐야 합니다. "
+                                + "이렇게 메서드 안에서 잘못된 출금을 막는 것이 캡슐화의 대표적인 장점입니다. "
+                                + "또한 withdraw()의 반환값을 확인하지 않으면 출금 실패를 알아차리지 못하므로, 실제 프로그램에서는 "
+                                + "if (!acc.withdraw(2000)) { ... }처럼 결과를 검사해 사용자에게 알려 주는 것이 좋습니다.",
+                        "1000"),
                 new ChoiceQuiz(905, 1,
                         "ArrayList에 저장된 요소의 개수를 반환하는 메서드는?",
                         "ArrayList의 size()는 현재 저장된 요소 개수를 반환합니다. 배열의 길이는 length 필드로 확인합니다.",
