@@ -26,6 +26,7 @@ import javax.swing.border.EmptyBorder;
 import javax.swing.border.LineBorder;
 import java.awt.BasicStroke;
 import java.awt.BorderLayout;
+import java.awt.CardLayout;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
@@ -74,6 +75,13 @@ public class QuizScreen extends BaseScreen {
          */
         default void onReturnRequested() {
         }
+
+        /**
+         * 팝업(HP 경고, 일시정지, GAME OVER)에서 고른 선택. 팝업 하나당 한 번만 호출된다.
+         * 화면은 타이머·입력만 처리하고, 선택에 따른 게임 진행(재시작, 화면 이동 등)은 받는 쪽이 정한다.
+         */
+        default void onPopupChoice(PopupChoice choice) {
+        }
     }
 
     /** 한 문제의 결과 종류 */
@@ -88,6 +96,49 @@ public class QuizScreen extends BaseScreen {
         ResultType(String title, Color color) {
             this.title = title;
             this.color = color;
+        }
+    }
+
+    /** 전투 화면 위에 뜨는 팝업 종류 */
+    public enum PopupType {
+        /** 플레이어 HP가 1이 되었을 때 경고 */
+        LOW_HP,
+        /** 일시정지 */
+        PAUSE,
+        /** HP 0 */
+        GAME_OVER
+    }
+
+    /** 팝업에서 고를 수 있는 선택 */
+    public enum PopupChoice {
+        /** HP 경고: 계속 싸우기 */
+        LOW_HP_CONTINUE(PopupType.LOW_HP, true),
+        /** HP 경고: 체력 보충하러 가기 */
+        LOW_HP_RECOVER(PopupType.LOW_HP, false),
+        /** 일시정지: 계속하기 */
+        PAUSE_RESUME(PopupType.PAUSE, true),
+        /** 일시정지: 전투 중단 */
+        PAUSE_ABORT(PopupType.PAUSE, false),
+        /** GAME OVER: 현재 스테이지 재시작 */
+        GAME_OVER_RESTART(PopupType.GAME_OVER, false),
+        /** GAME OVER: 스테이지 선택으로 돌아가기 */
+        GAME_OVER_STAGE_SELECT(PopupType.GAME_OVER, false);
+
+        private final PopupType popup;
+        private final boolean continuesBattle;
+
+        PopupChoice(PopupType popup, boolean continuesBattle) {
+            this.popup = popup;
+            this.continuesBattle = continuesBattle;
+        }
+
+        public PopupType popup() {
+            return popup;
+        }
+
+        /** true면 전투를 이어 가고, false면 이 화면을 떠나는 선택이다 */
+        public boolean continuesBattle() {
+            return continuesBattle;
         }
     }
 
@@ -121,6 +172,10 @@ public class QuizScreen extends BaseScreen {
 
     private static final int TIMER_TICK_MS = 100;
     private static final int WARNING_SECONDS = 5;
+    /** showQuiz의 제한시간으로 쓰면 타이머 없이 문제를 낸다 (시간 초과 규칙이 없는 게임 모드용). */
+    public static final int NO_TIME_LIMIT = 0;
+    /** 최대 HP가 이보다 크면 하트 대신 숫자와 막대로만 표시한다 (몬스터 HP가 큰 경우). */
+    private static final int MAX_HEART_ICONS = 8;
     /** 문제 문장은 이 줄 수까지 보이고 넘치면 스크롤 */
     private static final int QUESTION_MAX_LINES = 4;
     /** 결과·해설은 이 줄 수까지 보이고 넘치면 스크롤 */
@@ -171,6 +226,19 @@ public class QuizScreen extends BaseScreen {
     private final GameButton nextButton;
     private final GameButton returnButton;
 
+    // 일시정지 버튼과 팝업 (팝업은 문제 카드 자리에 뜬다: 일시정지 중 문제를 볼 수 없게)
+    private final GameButton pauseButton;
+    private final CardLayout centerLayout = new CardLayout();
+    private final JPanel centerPanel = new JPanel(centerLayout);
+    private final JPanel popupBox = new JPanel(new BorderLayout(0, 14));
+    private final JLabel popupTitle = new JLabel(" ", SwingConstants.CENTER);
+    private final JTextArea popupMessage = createWrappingText(new Font("SansSerif", Font.PLAIN, 17), Color.WHITE);
+    private final GameButton popupPrimary;
+    private final GameButton popupSecondary;
+    private PopupType popup;
+    private PopupChoice popupPrimaryChoice;
+    private PopupChoice popupSecondaryChoice;
+
     public QuizScreen(ScreenManager screenManager) {
         super(screenManager, new BorderLayout(18, 12));
         panel.setBackground(BG);
@@ -180,13 +248,19 @@ public class QuizScreen extends BaseScreen {
         inputSubmitButton = new GameButton("제출", this::submitInput);
         nextButton = new GameButton("다음 문제", this::requestNext);
         returnButton = new GameButton(DEFAULT_RETURN_TEXT, this::requestReturn);
+        pauseButton = new GameButton("일시정지 (ESC)", this::requestPause);
+        popupPrimary = new GameButton(" ", () -> choose(popupPrimaryChoice));
+        popupSecondary = new GameButton(" ", () -> choose(popupSecondaryChoice));
 
         countdown = new Timer(TIMER_TICK_MS, e -> onTimerTick());
 
         panel.add(createTopBar(), BorderLayout.NORTH);
         panel.add(wrapSide(playerView), BorderLayout.WEST);
         panel.add(wrapSide(monsterView), BorderLayout.EAST);
-        panel.add(createQuestionCard(), BorderLayout.CENTER);
+        centerPanel.setOpaque(false);
+        centerPanel.add(createQuestionCard(), "CARD");
+        centerPanel.add(createPopupPanel(), "POPUP");
+        panel.add(centerPanel, BorderLayout.CENTER);
 
         setupKeyBindings();
         resetQuestionView();
@@ -216,14 +290,14 @@ public class QuizScreen extends BaseScreen {
      * 새 문제를 표시하고 입력 상태와 타이머를 초기화한다. 전투가 끝난 뒤에는 무시한다.
      *
      * @param questionNo       화면에 표시할 문제 순번 (1부터)
-     * @param timeLimitSeconds 제한시간(초)
+     * @param timeLimitSeconds 제한시간(초). {@link #NO_TIME_LIMIT}(0)이면 타이머 없이 낸다
      */
     public void showQuiz(Quiz quiz, int questionNo, int timeLimitSeconds) {
         if (quiz == null) {
             throw new IllegalArgumentException("quiz is null");
         }
-        if (timeLimitSeconds <= 0) {
-            throw new IllegalArgumentException("timeLimitSeconds must be positive: " + timeLimitSeconds);
+        if (timeLimitSeconds < 0) {
+            throw new IllegalArgumentException("timeLimitSeconds must be 0 (no limit) or positive: " + timeLimitSeconds);
         }
         if (phase == Phase.FINISHED) {
             return;
@@ -231,6 +305,7 @@ public class QuizScreen extends BaseScreen {
         this.currentQuiz = quiz;
         this.timeLimitSeconds = timeLimitSeconds;
 
+        closePopup();
         resetQuestionView();
         stageLabel.setText("문제 " + questionNo);
 
@@ -253,6 +328,7 @@ public class QuizScreen extends BaseScreen {
         phase = Phase.ANSWERING;
         setInputsEnabled(true);
         startCountdown();
+        updatePauseButton();
 
         refreshLayout();
         SwingUtilities.invokeLater(() -> {
@@ -300,6 +376,7 @@ public class QuizScreen extends BaseScreen {
         nextButton.setVisible(showNext);
         nextButton.setEnabled(showNext);
         phase = Phase.SHOWING_RESULT;
+        updatePauseButton();
         refreshLayout();
         SwingUtilities.invokeLater(this::refreshLayout);
         if (showNext) {
@@ -331,13 +408,68 @@ public class QuizScreen extends BaseScreen {
         returnButton.setVisible(true);
         returnButton.setEnabled(true);
         phase = Phase.FINISHED;
+        updatePauseButton();
         refreshLayout();
         SwingUtilities.invokeLater(returnButton::requestFocusInWindow);
+    }
+
+    /**
+     * HP 경고 팝업 (계속 싸우기 / 체력 보충하러 가기). 답을 입력하는 중이면 타이머를 멈추고,
+     * '계속 싸우기'를 고르면 남은 시간부터 이어 간다. 이미 다른 팝업이 떠 있거나 전투가 끝났으면 무시한다.
+     */
+    public void showLowHpWarning(String message) {
+        if (popup != null || phase == Phase.FINISHED || phase == Phase.READY) {
+            return;
+        }
+        showPopup(PopupType.LOW_HP, "체력 경고!", message, new Color(245, 170, 60),
+                PopupChoice.LOW_HP_CONTINUE, "계속 싸우기", PopupChoice.LOW_HP_RECOVER, "체력 보충하러 가기");
+    }
+
+    /**
+     * GAME OVER 팝업 (현재 스테이지 재시작 / 스테이지 선택으로 돌아가기). 전투를 끝내고 모든 입력을 막는다.
+     * 결과·해설은 팝업 뒤 카드에 남아 있다.
+     */
+    public void showGameOver(String message) {
+        stopCountdown();
+        setInputsEnabled(false);
+        nextButton.setVisible(false);
+        nextButton.setEnabled(false);
+        returnButton.setVisible(false);
+        returnButton.setEnabled(false);
+        endLabel.setText("GAME OVER" + (message == null || message.isBlank() ? "" : " - " + message));
+        endLabel.setForeground(new Color(255, 120, 120));
+        endLabel.setVisible(true);
+        stageLabel.setText("GAME OVER");
+        phase = Phase.FINISHED;
+        closePopup();
+        showPopup(PopupType.GAME_OVER, "GAME OVER", message, new Color(240, 90, 100),
+                PopupChoice.GAME_OVER_RESTART, "현재 스테이지 재시작",
+                PopupChoice.GAME_OVER_STAGE_SELECT, "스테이지 선택으로");
+    }
+
+    /** 일시정지 팝업을 연다 (일시정지 버튼·ESC와 같다). 답을 입력하는 중이거나 결과를 보는 중에만 열린다. */
+    public void openPause() {
+        requestPause();
+    }
+
+    private void requestPause() {
+        if (popup != null || (phase != Phase.ANSWERING && phase != Phase.SHOWING_RESULT)) {
+            return;
+        }
+        showPopup(PopupType.PAUSE, "일시정지", "타이머가 멈췄습니다. 전투를 중단하면 이 화면을 떠납니다.",
+                new Color(150, 130, 255),
+                PopupChoice.PAUSE_RESUME, "계속하기", PopupChoice.PAUSE_ABORT, "전투 중단");
+    }
+
+    /** 지금 떠 있는 팝업. 없으면 null */
+    public PopupType getPopup() {
+        return popup;
     }
 
     /** 새 전투를 시작할 수 있도록 화면을 처음 상태로 되돌린다. */
     public void resetBattle() {
         stopCountdown();
+        closePopup();
         currentQuiz = null;
         phase = Phase.READY;
         resetQuestionView();
@@ -349,6 +481,7 @@ public class QuizScreen extends BaseScreen {
         timerLabel.setText(" ");
         timerLabel.setForeground(TIMER_NORMAL);
         timeBar.setValue(0);
+        updatePauseButton();
         refreshLayout();
     }
 
@@ -360,7 +493,7 @@ public class QuizScreen extends BaseScreen {
         return currentQuiz;
     }
 
-    /** 남은 시간(초, 올림). 타이머가 없으면 0 */
+    /** 남은 시간(초, 올림). 타이머가 없거나 제한시간 없는 문제면 0 */
     public int getRemainingSeconds() {
         return (int) Math.ceil(remainingMillis() / 1000.0);
     }
@@ -371,19 +504,14 @@ public class QuizScreen extends BaseScreen {
 
     @Override
     public void onEnter() {
-        if (phase == Phase.ANSWERING && pausedRemainingMillis >= 0) {
-            deadlineNanos = System.nanoTime() + pausedRemainingMillis * 1_000_000L;
-            pausedRemainingMillis = -1;
-            countdown.start();
+        if (popup == null) { // 팝업(일시정지 등)이 떠 있으면 고를 때까지 멈춘 채로 둔다
+            resumeCountdown();
         }
     }
 
     @Override
     public void onExit() {
-        if (phase == Phase.ANSWERING && countdown.isRunning()) {
-            pausedRemainingMillis = remainingMillis();
-            countdown.stop();
-        }
+        pauseCountdown();
     }
 
     // ---------------------------------------------------------------------
@@ -410,7 +538,7 @@ public class QuizScreen extends BaseScreen {
 
     /** 답안 제출. ANSWERING 단계에서 한 번만 리스너로 전달된다 (중복 제출 방지). */
     private void submit(String answer) {
-        if (phase != Phase.ANSWERING || currentQuiz == null) {
+        if (phase != Phase.ANSWERING || currentQuiz == null || popup != null) {
             return;
         }
         lockForJudging();
@@ -420,11 +548,12 @@ public class QuizScreen extends BaseScreen {
     }
 
     private void requestNext() {
-        if (phase != Phase.SHOWING_RESULT) {
+        if (phase != Phase.SHOWING_RESULT || popup != null) {
             return;
         }
         phase = Phase.WAITING_RESULT;
         nextButton.setEnabled(false);
+        updatePauseButton();
         if (listener != null) {
             listener.onNextRequested();
         }
@@ -432,7 +561,7 @@ public class QuizScreen extends BaseScreen {
 
     /** 전투 종료 후 복귀 버튼. FINISHED 단계에서 한 번만 리스너로 전달된다. */
     private void requestReturn() {
-        if (phase != Phase.FINISHED || !returnButton.isEnabled()) {
+        if (phase != Phase.FINISHED || !returnButton.isEnabled() || popup != null) {
             return;
         }
         returnButton.setEnabled(false);
@@ -445,6 +574,94 @@ public class QuizScreen extends BaseScreen {
         phase = Phase.WAITING_RESULT;
         stopCountdown();
         setInputsEnabled(false);
+        updatePauseButton();
+    }
+
+    // ---------------------------------------------------------------------
+    // 팝업
+    // ---------------------------------------------------------------------
+
+    private void showPopup(PopupType type, String title, String message, Color accent,
+                           PopupChoice primary, String primaryText, PopupChoice secondary, String secondaryText) {
+        pauseCountdown();
+        popup = type;
+        popupPrimaryChoice = primary;
+        popupSecondaryChoice = secondary;
+        popupTitle.setText(title);
+        popupTitle.setForeground(accent);
+        popupMessage.setText(message == null ? "" : message);
+        popupBox.setBorder(BorderFactory.createCompoundBorder(
+                new LineBorder(accent, 3, true), new EmptyBorder(22, 26, 22, 26)));
+        popupPrimary.setText(primaryText);
+        popupSecondary.setText(secondaryText);
+        popupPrimary.setEnabled(true);
+        popupSecondary.setEnabled(true);
+        centerLayout.show(centerPanel, "POPUP");
+        updatePauseButton();
+        refreshLayout();
+        SwingUtilities.invokeLater(popupPrimary::requestFocusInWindow);
+    }
+
+    private void closePopup() {
+        popup = null;
+        popupPrimaryChoice = null;
+        popupSecondaryChoice = null;
+        centerLayout.show(centerPanel, "CARD");
+    }
+
+    /** 팝업 버튼 선택. 지금 떠 있는 팝업의 선택만, 한 번만 받는다. */
+    private void choose(PopupChoice choice) {
+        if (choice == null || popup != choice.popup()) {
+            return;
+        }
+        popupPrimary.setEnabled(false);
+        popupSecondary.setEnabled(false);
+        closePopup();
+        if (choice.continuesBattle()) {
+            resumeCountdown();
+            updatePauseButton();
+            if (phase == Phase.ANSWERING && currentQuiz instanceof ChoiceQuiz) {
+                SwingUtilities.invokeLater(panel::requestFocusInWindow);
+            } else if (phase == Phase.ANSWERING) {
+                SwingUtilities.invokeLater(inputField::requestFocusInWindow);
+            } else if (phase == Phase.SHOWING_RESULT && nextButton.isVisible()) {
+                SwingUtilities.invokeLater(nextButton::requestFocusInWindow);
+            }
+        } else {
+            leaveBattle(choice);
+        }
+        refreshLayout();
+        if (listener != null) {
+            listener.onPopupChoice(choice);
+        }
+    }
+
+    /** 화면을 떠나는 선택 뒤: 더 이상 입력·진행을 받지 않는다. 실제 이동은 리스너가 한다. */
+    private void leaveBattle(PopupChoice choice) {
+        stopCountdown();
+        setInputsEnabled(false);
+        nextButton.setVisible(false);
+        nextButton.setEnabled(false);
+        returnButton.setVisible(false);
+        returnButton.setEnabled(false);
+        String text = switch (choice) {
+            case PAUSE_ABORT -> "전투를 중단했습니다.";
+            case LOW_HP_RECOVER -> "체력을 보충하러 갑니다.";
+            case GAME_OVER_RESTART -> "스테이지를 다시 시작합니다.";
+            case GAME_OVER_STAGE_SELECT -> "스테이지 선택으로 돌아갑니다.";
+            default -> "";
+        };
+        endLabel.setText(text);
+        endLabel.setForeground(new Color(220, 210, 255));
+        endLabel.setVisible(true);
+        phase = Phase.FINISHED;
+        updatePauseButton();
+    }
+
+    private void updatePauseButton() {
+        boolean available = popup == null && (phase == Phase.ANSWERING || phase == Phase.SHOWING_RESULT);
+        pauseButton.setVisible(available);
+        pauseButton.setEnabled(available);
     }
 
     private void setInputsEnabled(boolean enabled) {
@@ -465,7 +682,18 @@ public class QuizScreen extends BaseScreen {
             bindKey(KeyStroke.getKeyStroke(KeyEvent.VK_NUMPAD0 + n, 0), "choice_np_" + n,
                     () -> selectChoiceByKey(choiceNo));
         }
+        // ESC: 일시정지 열기 / 일시정지 중이면 계속하기
+        bindKey(KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), "pause_toggle", () -> {
+            if (popup == PopupType.PAUSE) {
+                choose(PopupChoice.PAUSE_RESUME);
+            } else {
+                requestPause();
+            }
+        });
         bindKey(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "submit_or_next", () -> {
+            if (popup != null) {
+                return; // 팝업 버튼은 클릭(또는 포커스 후 Space)으로만 고른다
+            }
             if (phase == Phase.ANSWERING && currentQuiz instanceof ChoiceQuiz) {
                 submitSelectedChoice();
             } else if (phase == Phase.SHOWING_RESULT && nextButton.isVisible()) {
@@ -475,7 +703,7 @@ public class QuizScreen extends BaseScreen {
     }
 
     private void selectChoiceByKey(int choiceNo) {
-        if (phase != Phase.ANSWERING || !(currentQuiz instanceof ChoiceQuiz)) {
+        if (phase != Phase.ANSWERING || !(currentQuiz instanceof ChoiceQuiz) || popup != null) {
             return;
         }
         if (inputField.isFocusOwner()) {
@@ -503,6 +731,14 @@ public class QuizScreen extends BaseScreen {
 
     private void startCountdown() {
         pausedRemainingMillis = -1;
+        if (timeLimitSeconds == NO_TIME_LIMIT) {
+            countdown.stop();
+            timerLabel.setText("제한 시간 없음");
+            timerLabel.setForeground(TIMER_NORMAL);
+            timeBar.setForeground(new Color(140, 120, 255));
+            timeBar.setValue(1000);
+            return;
+        }
         deadlineNanos = System.nanoTime() + timeLimitSeconds * 1_000_000_000L;
         updateTimerDisplay(timeLimitSeconds * 1000L);
         countdown.restart();
@@ -513,8 +749,27 @@ public class QuizScreen extends BaseScreen {
         pausedRemainingMillis = -1;
     }
 
+    /** 남은 시간을 기억하고 타이머를 멈춘다 (일시정지·팝업·화면 전환). 이미 멈춰 있으면 그대로. */
+    private void pauseCountdown() {
+        if (phase == Phase.ANSWERING && countdown.isRunning()) {
+            long remaining = remainingMillis();
+            countdown.stop();
+            pausedRemainingMillis = remaining;
+            updateTimerDisplay(remaining);
+        }
+    }
+
+    /** 멈춘 시점의 남은 시간부터 다시 센다. */
+    private void resumeCountdown() {
+        if (phase == Phase.ANSWERING && pausedRemainingMillis >= 0 && timeLimitSeconds != NO_TIME_LIMIT) {
+            deadlineNanos = System.nanoTime() + pausedRemainingMillis * 1_000_000L;
+            pausedRemainingMillis = -1;
+            countdown.start();
+        }
+    }
+
     private long remainingMillis() {
-        if (phase != Phase.ANSWERING) {
+        if (phase != Phase.ANSWERING || timeLimitSeconds == NO_TIME_LIMIT) {
             return 0;
         }
         if (pausedRemainingMillis >= 0) {
@@ -531,12 +786,43 @@ public class QuizScreen extends BaseScreen {
         long remaining = remainingMillis();
         updateTimerDisplay(remaining);
         if (remaining <= 0) {
-            Quiz expired = currentQuiz;
-            lockForJudging();
-            if (listener != null) {
-                listener.onTimeExpired(expired);
-            }
+            onTimeUp();
         }
+    }
+
+    /**
+     * 제한시간이 끝났을 때: 고른 보기나 입력한 답이 있으면 그 답을 자동 제출해 정답·오답으로 판정받고,
+     * 답이 없을 때만 시간 초과로 알린다. 수동 제출과 같은 submit 경로를 쓰므로 판정은 한 번만 일어난다.
+     * 팝업(일시정지 등) 중에는 타이머가 멈춰 있어 여기 오지 않는다.
+     */
+    private void onTimeUp() {
+        if (phase != Phase.ANSWERING || currentQuiz == null || popup != null) {
+            return;
+        }
+        String pending = pendingAnswer();
+        if (pending != null) {
+            submit(pending);
+            return;
+        }
+        Quiz expired = currentQuiz;
+        lockForJudging();
+        if (listener != null) {
+            listener.onTimeExpired(expired);
+        }
+    }
+
+    /** 지금 화면에 들어 있는 답. 객관식은 선택한 보기 번호, 단답형은 입력한 내용. 없으면 null */
+    private String pendingAnswer() {
+        if (currentQuiz instanceof ChoiceQuiz) {
+            for (int i = 0; i < choiceButtons.size(); i++) {
+                if (choiceButtons.get(i).isSelected()) {
+                    return String.valueOf(i + 1);
+                }
+            }
+            return null;
+        }
+        String text = inputField.getText();
+        return text == null || text.isBlank() ? null : text;
     }
 
     private void updateTimerDisplay(long remainingMillis) {
@@ -577,10 +863,13 @@ public class QuizScreen extends BaseScreen {
         timerBox.add(barHolder, BorderLayout.SOUTH);
         bar.add(timerBox, BorderLayout.CENTER);
 
-        JPanel rightSpacer = new JPanel();
-        rightSpacer.setOpaque(false);
-        rightSpacer.setPreferredSize(new Dimension(200, 30));
-        bar.add(rightSpacer, BorderLayout.EAST);
+        JPanel rightBox = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+        rightBox.setOpaque(false);
+        rightBox.setPreferredSize(new Dimension(200, 44));
+        pauseButton.setName("pauseButton");
+        pauseButton.setPreferredSize(new Dimension(170, 40));
+        rightBox.add(pauseButton);
+        bar.add(rightBox, BorderLayout.EAST);
         return bar;
     }
 
@@ -682,6 +971,34 @@ public class QuizScreen extends BaseScreen {
         card.add(filler, c);
 
         return card;
+    }
+
+    private JPanel createPopupPanel() {
+        JPanel holder = new JPanel(new GridBagLayout());
+        holder.setName("popupPanel");
+        holder.setOpaque(false);
+
+        popupBox.setName("popupBox");
+        popupBox.setBackground(new Color(40, 32, 76));
+        popupBox.setPreferredSize(new Dimension(520, 280));
+        popupTitle.setName("popupTitle");
+        popupTitle.setFont(new Font("SansSerif", Font.BOLD, 30));
+        popupMessage.setName("popupMessage");
+        popupMessage.setRows(3);
+
+        JPanel buttons = new JPanel(new GridLayout(1, 2, 12, 0));
+        buttons.setOpaque(false);
+        popupPrimary.setName("popupPrimary");
+        popupSecondary.setName("popupSecondary");
+        popupPrimary.setPreferredSize(new Dimension(200, 46));
+        buttons.add(popupPrimary);
+        buttons.add(popupSecondary);
+
+        popupBox.add(popupTitle, BorderLayout.NORTH);
+        popupBox.add(popupMessage, BorderLayout.CENTER);
+        popupBox.add(buttons, BorderLayout.SOUTH);
+        holder.add(popupBox);
+        return holder;
     }
 
     private JPanel createChoiceArea() {
@@ -1053,10 +1370,11 @@ public class QuizScreen extends BaseScreen {
                 g2.fillRoundRect(barX, barY, barW * hp / maxHp, 8, 8, 8);
             }
 
-            // 하트
+            // 하트 (최대 HP가 크면 숫자와 막대만)
             int heart = 18;
             int gap = 6;
-            for (int i = 0; i < maxHp; i++) {
+            int hearts = maxHp <= MAX_HEART_ICONS ? maxHp : 0;
+            for (int i = 0; i < hearts; i++) {
                 int hx = barX + i * (heart + gap);
                 paintHeart(g2, hx, barY + 14, heart, i < hp);
             }
