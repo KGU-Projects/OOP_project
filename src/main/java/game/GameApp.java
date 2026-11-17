@@ -49,7 +49,7 @@ public class GameApp {
 
             ScreenManager screenManager = new ScreenManager(mainContainer, cardLayout);
             UserService userService = new UserService();
-            GameService gameService = new GameService();
+            GameService gameService = new GameService(null, null, null);
             // PhysicsEngine physicsEngine = new PhysicsEngine();
 
             // 스크린매니저에 각 화면 등록
