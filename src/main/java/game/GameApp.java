@@ -7,7 +7,13 @@ import game.ui.screens.LoadScreen;
 import game.ui.screens.StartScreen;
 import game.service.UserService;
 import game.service.GameService;
+import game.common.GameConstants;
 import game.common.ScreenType;
+import game.repository.file.FileQuizRepository;
+import game.repository.file.FileSaveRepository;
+import game.repository.file.FileStageRepository;
+
+import java.nio.file.Path;
 
 import java.awt.CardLayout;
 //import java.awt.Dimension;
@@ -49,7 +55,10 @@ public class GameApp {
 
             ScreenManager screenManager = new ScreenManager(mainContainer, cardLayout);
             UserService userService = new UserService();
-            GameService gameService = new GameService(null, null, null);
+            GameService gameService = new GameService(
+                    new FileQuizRepository(Path.of(GameConstants.QUIZ_FILE)),
+                    new FileStageRepository(Path.of(GameConstants.STAGE_DIRECTORY)),
+                    new FileSaveRepository(Path.of(GameConstants.SAVE_DIRECTORY)));
             // PhysicsEngine physicsEngine = new PhysicsEngine();
 
             // 스크린매니저에 각 화면 등록

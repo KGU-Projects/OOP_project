@@ -9,6 +9,12 @@ public final class GameConstants {
     /** 스테이지 파일(stageN.txt)이 들어 있는 폴더. 프로젝트 루트에서 실행하는 것을 전제로 한다. */
     public static final String STAGE_DIRECTORY = "data/stages";
 
+    /** 퀴즈 파일 경로. */
+    public static final String QUIZ_FILE = "data/quiz.txt";
+
+    /** 세이브 폴더(saves/<닉네임>/slotN.txt)의 루트. */
+    public static final String SAVE_DIRECTORY = "data/saves";
+
     /** 사용자당 세이브 슬롯 수. 슬롯 번호는 1부터 이 값까지다. */
     public static final int SAVE_SLOT_COUNT = 3;
 
