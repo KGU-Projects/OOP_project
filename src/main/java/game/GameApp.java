@@ -6,6 +6,7 @@ import game.ui.screens.GameScreen;
 import game.ui.screens.LoadScreen;
 import game.ui.screens.StartScreen;
 import game.service.UserService;
+import game.service.GameService;
 import game.common.ScreenType;
 
 import java.awt.CardLayout;
@@ -34,6 +35,7 @@ public class GameApp {
 
     private static void initGame() {
         SwingUtilities.invokeLater(() -> {
+
             // 창 생성
             JFrame frame = new JFrame("OOP_project");
             frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -47,16 +49,20 @@ public class GameApp {
 
             ScreenManager screenManager = new ScreenManager(mainContainer, cardLayout);
             UserService userService = new UserService();
+            GameService gameService = new GameService();
+            // PhysicsEngine physicsEngine = new PhysicsEngine();
 
-            // 스크린매니저에 각 화면 등록, 등장
+            // 스크린매니저에 각 화면 등록
             screenManager.register(ScreenType.START, new StartScreen(screenManager));
             screenManager.register(ScreenType.LOAD, new LoadScreen(screenManager, userService));
-            screenManager.register(ScreenType.GAME, new GameScreen(screenManager, userService));
+            screenManager.register(ScreenType.GAME, new GameScreen(screenManager, userService, gameService));
             screenManager.register(ScreenType.PLACEHOLDER,
                     new SlopPlaceHolderScreen(screenManager, () -> screenManager.show(ScreenType.GAME)));
             frame.add(mainContainer);
-            frame.setVisible(true);
+
+            // 시작화면 등장
             screenManager.show(ScreenType.START);
+            frame.setVisible(true);
 
         });
     }

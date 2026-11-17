@@ -16,12 +16,11 @@ public abstract class BaseScreen implements Screen {
 
     protected BaseScreen(ScreenManager screenManager, LayoutManager layout) {
 
-        // 패널 스타일링: 흑색, 패딩 40,50
+        // 패널 스타일링
         this.screenManager = screenManager;
         this.panel = new JPanel(layout);
         this.panel.setOpaque(true);
         this.panel.setBackground(Color.BLACK);
-        this.panel.setBorder(new EmptyBorder(40, 50, 40, 50));
     }
 
     // 타이틀, 추후 이미지로 대체할 것

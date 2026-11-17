@@ -13,6 +13,8 @@ import game.ui.components.GameButton;
 //import javax.swing.JLabel;
 //import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.border.EmptyBorder;
+
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.GridLayout;
@@ -48,10 +50,9 @@ public class StartScreen extends BaseScreen {
 
         // 패딩
         gbc.gridx = 0;
-        gbc.gridy = 0;
-        gbc.gridwidth = 2;
+        gbc.gridy = 1;
         gbc.weightx = 1.0;
-        gbc.weighty = 0.0;
+        gbc.weighty = 1.0;
         gbc.anchor = GridBagConstraints.NORTHWEST;
         gbc.insets = new Insets(0, 0, 30, 0);
 
@@ -60,9 +61,10 @@ public class StartScreen extends BaseScreen {
 
         // 좌측 버튼
         List<MenuItem> menuItems = List.of(
+                new MenuItem("시작화면 개념증명", () -> screenManager.show(ScreenType.PLACEHOLDER)),
                 new MenuItem("시작", () -> screenManager.show(ScreenType.GAME)), // 추후에 올바른 커넥터로
                 new MenuItem("불러오기", () -> screenManager.show(ScreenType.LOAD)),
-                new MenuItem("점수판", () -> screenManager.show(ScreenType.PLACEHOLDER)),
+                new MenuItem("점수화면", () -> screenManager.show(ScreenType.PLACEHOLDER)),
                 new MenuItem("종료", () -> System.exit(0)));
 
         JPanel buttonPanel = new JPanel(new GridLayout(menuItems.size(), 1, 0, 15));
@@ -83,14 +85,10 @@ public class StartScreen extends BaseScreen {
          * buttonPanel.add(exitBtn);
          */
 
-        gbc.gridx = 0;
-        gbc.gridy = 1;
-        gbc.gridwidth = 1;
-        gbc.weightx = 0.5;
-        gbc.weighty = 1.0;
         gbc.anchor = GridBagConstraints.WEST;
         gbc.insets = new Insets(0, 0, 0, 0);
         panel.add(buttonPanel, gbc);
+        panel.setBorder(new EmptyBorder(40, 50, 40, 50));
 
     }
 
