@@ -67,7 +67,7 @@ public class StartScreen extends BaseScreen {
         List<MenuItem> menuItems = List.of(
                 new MenuItem("시작", () -> screenManager.show(ScreenType.GAME)), // 추후에 올바른 커넥터로
                 new MenuItem("불러오기", () -> screenManager.show(ScreenType.LOAD)),
-                new MenuItem("점수판", () -> screenManager.show(ScreenType.LOAD)),
+                new MenuItem("점수판", () -> screenManager.show(ScreenType.PLACEHOLDER)),
                 new MenuItem("종료", () -> System.exit(0)));
 
         JPanel buttonPanel = new JPanel(new GridLayout(menuItems.size(), 1, 0, 15));
