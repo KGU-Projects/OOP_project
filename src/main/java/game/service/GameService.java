@@ -18,8 +18,8 @@ import game.model.SaveData;
 /** UI와 데이터 사이 연결 및 게임 규칙 처리 */
 public class GameService {
     private static final int FIRST_STAGE = 1;
-    /** 플레이어 최대 체력 (TODO: 확정 전 임시값, 3으로 수정될 수도. 일단 UI에서 임시로 쓰는 5로 맞춤) */
-    private static final int MAX_HP = 5;
+    /** 플레이어 최대 체력: 몬스터 전투가 끝나도 깎인 체력은 그대로 이어짐 */
+    private static final int MAX_HP = 3;
     private static final int QUIZ_SCORE = 100;
     private static final int WRONG_ANSWER_DAMAGE = 1;
 
@@ -131,9 +131,22 @@ public class GameService {
             return new AnswerResult(true, explanation, QUIZ_SCORE, 0, false, 0, false);
         }
         // 오답: 체력 깎고 체력 0인지 확인(퀴즈는 열린 채로 두기. 다시 도전 가능)
+        return applyWrongAnswer(explanation);
+    }
+
+    /** 오답/시간 초과 공통 처리: 체력 깎고 사망 확인 (퀴즈는 열린 채로) */
+    private AnswerResult applyWrongAnswer(String explanation) {
         state.damage(WRONG_ANSWER_DAMAGE);
         boolean isDead = state.isDead();
         return new AnswerResult(false, explanation, 0, WRONG_ANSWER_DAMAGE, isDead, 0, false);
+    }
+
+    /** 시간 초과: 답을 못 냈을 때. 오답과 똑같이 체력 -1 (퀴즈 화면이 20초를 잼) */
+    public AnswerResult timeOut() {
+        if (currentQuiz == null) {
+            throw new IllegalStateException("열린 퀴즈가 없습니다");
+        }
+        return applyWrongAnswer(currentQuiz.getExplanation());
     }
 
     /** 퀴즈 취소: 열린 퀴즈 정보만 지우고 맵으로 */
