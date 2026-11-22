@@ -1,12 +1,23 @@
 package game.model.object;
 
-/** 오브젝트 종류. symbol은 개발용 맵 미리보기에서 쓰는 글자이고 스테이지 파일에는 쓰지 않는다. */
+import java.util.Set;
+
 public enum ObjectType {
+
     BUTTON('B'),
     DOOR('D'),
     KEY('K'),
     ITEM('I'),
-    BOSS('M');
+    BOSS('M'),
+
+    MONSTER('M'),
+    CHEST('S'),
+    MIMIC('S'),
+    TRAP('.'),
+    EXIT('D'),
+    MOVE_PLATFORM('A');
+
+    private static final Set<Character> MAP_SYMBOLS = Set.of('B', 'D', 'K', 'I', 'M', 'S', 'A');
 
     private final char symbol;
 
@@ -16,5 +27,13 @@ public enum ObjectType {
 
     public char getSymbol() {
         return symbol;
+    }
+
+    public boolean hasDedicatedMapSymbol() {
+        return this != TRAP;
+    }
+
+    public static boolean isMapObjectSymbol(char c) {
+        return MAP_SYMBOLS.contains(c);
     }
 }

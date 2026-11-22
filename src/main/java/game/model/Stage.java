@@ -6,34 +6,36 @@ import game.model.object.GameObject;
 import java.util.List;
 import java.util.Optional;
 
-/** 스테이지 하나: 정보, 지형 격자, 오브젝트 목록. 좌표는 왼쪽 위가 (0, 0)인 타일 단위다. */
+/** 스테이지 하나: 정보(번호|제목|개념|가로|세로), 지형 격자, 오브젝트 목록. */
 public class Stage {
 
     private final int number;
     private final String title;
     private final String concept;
-    private final StageType type;
-    private final int theme;
     private final int width;
     private final int height;
-    private final Tile[][] terrain;      // terrain[y][x]
+    private final Tile[][] terrain;
     private final int startTileX;
     private final int startTileY;
     private final List<GameObject> objects;
 
-    public Stage(int number, String title, String concept, StageType type, int theme,
-                 Tile[][] terrain, int startTileX, int startTileY, List<GameObject> objects) {
+    public Stage(int number, String title, String concept,
+            Tile[][] terrain, int startTileX, int startTileY, List<GameObject> objects) {
         this.number = number;
         this.title = title;
         this.concept = concept;
-        this.type = type;
-        this.theme = theme;
         this.height = terrain.length;
         this.width = terrain[0].length;
         this.terrain = copyOf(terrain);
         this.startTileX = startTileX;
         this.startTileY = startTileY;
         this.objects = List.copyOf(objects);
+    }
+
+    /** 기존 호출부 호환용 생성자 */
+    public Stage(int number, String title, String concept, StageType ignoredType, int ignoredTheme,
+            Tile[][] terrain, int startTileX, int startTileY, List<GameObject> objects) {
+        this(number, title, concept, terrain, startTileX, startTileY, objects);
     }
 
     private static Tile[][] copyOf(Tile[][] source) {
@@ -44,7 +46,6 @@ public class Stage {
         return copy;
     }
 
-    /** 맵 밖은 SOLID로 취급한다. 플레이어가 가장자리를 벗어나지 못하게 하기 위해서다. */
     public Tile getTile(int x, int y) {
         if (x < 0 || x >= width || y < 0 || y >= height) {
             return Tile.SOLID;
@@ -60,12 +61,10 @@ public class Stage {
         return objects.stream().filter(o -> o.getId().equals(id)).findFirst();
     }
 
-    /** 'P' 타일 위에 발이 닿게 서는 x 좌표: 타일 가운데에 몸체 폭을 맞춘다. */
     public double getStartX() {
         return startTileX + (1 - GameConstants.PLAYER_WIDTH) / 2;
     }
 
-    /** 'P' 타일 위에 발이 닿게 서는 y 좌표: 타일 바닥에서 키만큼 올라간 위치. */
     public double getStartY() {
         return startTileY + 1 - GameConstants.PLAYER_HEIGHT;
     }
@@ -80,14 +79,6 @@ public class Stage {
 
     public String getConcept() {
         return concept;
-    }
-
-    public StageType getType() {
-        return type;
-    }
-
-    public int getTheme() {
-        return theme;
     }
 
     public int getWidth() {
@@ -108,24 +99,5 @@ public class Stage {
 
     public List<GameObject> getObjects() {
         return objects;
-    }
-
-    /** 개발용 출력. 정보 한 줄, 지형, 오브젝트 목록 순이다. */
-    @Override
-    public String toString() {
-        StringBuilder out = new StringBuilder(String.format("[스테이지 %d] \"%s\" (%s, %s) %d x %d, 시작 (%d, %d)",
-                getNumber(), getTitle(), getConcept(), getType(), getWidth(), getHeight(),
-                getStartTileX(), getStartTileY()));
-        for (int y = 0; y < getHeight(); y++) {
-            out.append(System.lineSeparator()).append("    ");
-            for (int x = 0; x < getWidth(); x++) {
-                out.append(getTile(x, y).getSymbol());
-            }
-        }
-        for (GameObject object : getObjects()) {
-            out.append(String.format("%n    %s (%d, %d) %s", object.getId(), object.getX(), object.getY(),
-                    object.describe()));
-        }
-        return out.toString();
     }
 }
