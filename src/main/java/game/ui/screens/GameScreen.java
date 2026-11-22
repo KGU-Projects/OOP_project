@@ -148,6 +148,8 @@ public class GameScreen extends BaseScreen {
             return;
         }
         switch (outcome.type()) {
+            case NONE -> {
+            }
             case MESSAGE, STAGE_CLEAR -> showStatus(outcome.message(), 2.2);
             case START_QUIZ -> openQuizFor(outcome.source());
         }

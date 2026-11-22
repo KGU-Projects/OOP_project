@@ -58,6 +58,7 @@ public class StartScreen extends BaseScreen {
         List<MenuItem> menuItems = List.of(
                 new MenuItem("시작", "startscreen-startbutton.png", false, () -> screenManager.show(ScreenType.GAME)),
                 new MenuItem("불러오기", "startscreen-loadbutton.png", false, () -> screenManager.show(ScreenType.LOAD)),
+                new MenuItem("컷신", "startscreen-loadbutton.png", false, () -> screenManager.show(ScreenType.CUTSCENE)),
                 new MenuItem("종료", "startscreen-exitbutton.png", false, () -> System.exit(0)));
 
         JPanel buttonPanel = new JPanel(new GridLayout(menuItems.size(), 1, 0, 15));

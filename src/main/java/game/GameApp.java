@@ -2,6 +2,8 @@ package game;
 
 import game.common.GameConstants;
 import game.common.ScreenType;
+import game.repository.CutsceneRepository;
+import game.repository.file.FileCutsceneRepository;
 import game.repository.file.FileQuizRepository;
 import game.repository.file.FileSaveRepository;
 import game.repository.file.FileStageRepository;
@@ -9,10 +11,12 @@ import game.service.GameService;
 import game.service.UserService;
 import game.ui.BaseScreen;
 import game.ui.ScreenManager;
+import game.ui.screens.CutsceneScreen;
 import game.ui.screens.GameScreen;
 import game.ui.screens.LoadScreen;
 import game.ui.screens.QuizScreen;
 import game.ui.screens.StartScreen;
+import game.ui.ImageLoader;
 
 import javax.swing.JFrame;
 import javax.swing.JPanel;
@@ -50,12 +54,17 @@ public class GameApp {
                     new FileQuizRepository(Path.of(GameConstants.QUIZ_FILE)),
                     new FileStageRepository(Path.of(GameConstants.STAGE_DIRECTORY)),
                     new FileSaveRepository(Path.of(GameConstants.SAVE_DIRECTORY)));
+            CutsceneRepository cutsceneRepository = new FileCutsceneRepository(
+                    Path.of(GameConstants.CUTSCENE_DIRECTORY));
+            ImageLoader imageLoader = new ImageLoader();
 
             // 스크린매니저에 각 화면 등록
             screenManager.register(ScreenType.START, new StartScreen(screenManager));
             screenManager.register(ScreenType.LOAD, new LoadScreen(screenManager, userService));
             screenManager.register(ScreenType.GAME, new GameScreen(screenManager, userService, gameService));
             screenManager.register(ScreenType.QUIZ, new QuizScreen(screenManager));
+            screenManager.register(ScreenType.CUTSCENE,
+                    new CutsceneScreen(screenManager, cutsceneRepository, imageLoader));
             screenManager.register(ScreenType.PLACEHOLDER, new BaseScreen(screenManager, new GridBagLayout()) {
                 @Override
                 public void onEnter() {
