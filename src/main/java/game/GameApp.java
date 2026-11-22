@@ -1,26 +1,25 @@
 package game;
 
-import game.ui.ScreenManager;
-import game.ui.screens.SlopPlaceHolderScreen;
-import game.ui.screens.GameScreen;
-import game.ui.screens.LoadScreen;
-import game.ui.screens.StartScreen;
-import game.service.UserService;
-import game.service.GameService;
+import java.awt.CardLayout;
+import java.nio.file.Path;
+
+import javax.swing.JFrame;
+import javax.swing.JPanel;
+import javax.swing.SwingUtilities;
+
 import game.common.GameConstants;
 import game.common.ScreenType;
 import game.repository.file.FileQuizRepository;
 import game.repository.file.FileSaveRepository;
 import game.repository.file.FileStageRepository;
-
-import java.nio.file.Path;
-
-import java.awt.CardLayout;
-//import java.awt.Dimension;
-
-import javax.swing.JFrame;
-import javax.swing.JPanel;
-import javax.swing.SwingUtilities;
+import game.repository.file.FileUserRepository;
+import game.service.GameService;
+import game.service.UserService;
+import game.ui.ScreenManager;
+import game.ui.screens.GameScreen;
+import game.ui.screens.LoadScreen;
+import game.ui.screens.SlopPlaceHolderScreen;
+import game.ui.screens.StartScreen;
 
 //게임의 시작점
 //jframe으로 게임 윈도우 생성
@@ -54,7 +53,9 @@ public class GameApp {
             JPanel mainContainer = new JPanel(cardLayout);
 
             ScreenManager screenManager = new ScreenManager(mainContainer, cardLayout);
-            UserService userService = new UserService();
+            // 기존: UserService userService = new UserService(); => 유저서비스 파일 완성해서 수정함.
+            // users.txt를 읽고 쓰는 사용자 창고(FileUserRepository)를 만들어 UserService에 넘김.
+            UserService userService = new UserService(new FileUserRepository(Path.of("data/users.txt")));
             GameService gameService = new GameService(
                     new FileQuizRepository(Path.of(GameConstants.QUIZ_FILE)),
                     new FileStageRepository(Path.of(GameConstants.STAGE_DIRECTORY)),
