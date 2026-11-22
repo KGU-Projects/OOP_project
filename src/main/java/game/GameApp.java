@@ -1,25 +1,27 @@
 package game;
 
-import java.awt.CardLayout;
-import java.nio.file.Path;
-
-import javax.swing.JFrame;
-import javax.swing.JPanel;
-import javax.swing.SwingUtilities;
-
+import game.ui.ScreenManager;
+import game.ui.screens.SlopPlaceHolderScreen;
+import game.ui.screens.GameScreen;
+import game.ui.screens.LoadScreen;
+import game.ui.screens.StartScreen;
+import game.service.UserService;
+import game.service.GameService;
 import game.common.GameConstants;
 import game.common.ScreenType;
 import game.repository.file.FileQuizRepository;
 import game.repository.file.FileSaveRepository;
 import game.repository.file.FileStageRepository;
 import game.repository.file.FileUserRepository;
-import game.service.GameService;
-import game.service.UserService;
-import game.ui.ScreenManager;
-import game.ui.screens.GameScreen;
-import game.ui.screens.LoadScreen;
-import game.ui.screens.SlopPlaceHolderScreen;
-import game.ui.screens.StartScreen;
+
+import java.nio.file.Path;
+
+import java.awt.CardLayout;
+//import java.awt.Dimension;
+
+import javax.swing.JFrame;
+import javax.swing.JPanel;
+import javax.swing.SwingUtilities;
 
 //게임의 시작점
 //jframe으로 게임 윈도우 생성
