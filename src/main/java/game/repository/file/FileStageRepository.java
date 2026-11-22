@@ -1,16 +1,23 @@
 package game.repository.file;
 
+import game.model.ItemType;
 import game.model.Stage;
 import game.model.Tile;
+import game.model.object.BossObject;
+import game.model.object.ButtonObject;
 import game.model.object.ChestObject;
+import game.model.object.DoorObject;
 import game.model.object.ExitObject;
 import game.model.object.GameObject;
+import game.model.object.ItemObject;
+import game.model.object.KeyObject;
 import game.model.object.MimicObject;
 import game.model.object.MonsterObject;
 import game.model.object.MovePlatformObject;
 import game.model.object.ObjectType;
 import game.model.object.RewardType;
 import game.model.object.TrapObject;
+import game.model.object.TriggerType;
 import game.repository.StageRepository;
 
 import java.io.IOException;
@@ -33,7 +40,8 @@ import java.util.stream.Stream;
  * - 헤더(5칸): 번호|제목|개념|가로|세로
  * - 지형(세로 줄): #(벽), .(빈 공간/TRAP), P(시작 위치), M(MONSTER), S(CHEST/MIMIC),
  * D(EXIT), A(MOVE_PLATFORM)
- * - 오브젝트(8칸): ID|TYPE|x|y|quizId|reward|trigger|extra
+ * - 오브젝트(8칸): ID|TYPE|x|y|quizId|reward|trigger|extra (기존
+ * BUTTON/DOOR/KEY/ITEM/BOSS 형식도 함께 지원)
  */
 public class FileStageRepository implements StageRepository {
 
@@ -217,7 +225,9 @@ public class FileStageRepository implements StageRepository {
     }
 
     private GameObject createObject(LineReader reader, String[] fields, int mapWidth, int mapHeight) {
-        reader.requireFieldCount(fields, OBJECT_FIELD_COUNT, "오브젝트 줄(ID|TYPE|x|y|quizId|reward|trigger|extra)");
+        if (fields.length < 4) {
+            throw reader.error("오브젝트 줄의 칸 수가 부족합니다");
+        }
 
         String id = fields[0].trim();
         if (!OBJECT_ID_PATTERN.matcher(id).matches()) {
@@ -227,46 +237,86 @@ public class FileStageRepository implements StageRepository {
         ObjectType type = parseEnum(reader, ObjectType.class, fields[1].trim(), "오브젝트 종류");
         int x = reader.parseInt(fields[2], "x", 0);
         int y = reader.parseInt(fields[3], "y", 0);
-        int quizId = reader.parseInt(fields[4], "quizId", 0);
-        RewardType rewardType = parseEnum(reader, RewardType.class, fields[5].trim(), "보상 유형");
-        game.model.object.TriggerType triggerType = parseEnum(reader, game.model.object.TriggerType.class,
-                fields[6].trim(), "트리거 유형");
-        String extra = fields[7].trim();
 
         return switch (type) {
             case MONSTER -> {
-                requireNoExtra(reader, extra, type);
-                yield new MonsterObject(id, x, y, quizId, rewardType, triggerType);
+                ParsedSchemaFields schema = parseSchemaFields(reader, fields);
+                requireNoExtra(reader, schema.extra, type);
+                yield new MonsterObject(id, x, y, schema.quizId, schema.reward, schema.trigger);
             }
             case CHEST -> {
-                requireNoExtra(reader, extra, type);
-                yield new ChestObject(id, x, y, quizId, rewardType, triggerType);
+                ParsedSchemaFields schema = parseSchemaFields(reader, fields);
+                requireNoExtra(reader, schema.extra, type);
+                yield new ChestObject(id, x, y, schema.quizId, schema.reward, schema.trigger);
             }
             case MIMIC -> {
-                requireNoExtra(reader, extra, type);
-                yield new MimicObject(id, x, y, quizId, rewardType, triggerType);
+                ParsedSchemaFields schema = parseSchemaFields(reader, fields);
+                requireNoExtra(reader, schema.extra, type);
+                yield new MimicObject(id, x, y, schema.quizId, schema.reward, schema.trigger);
             }
             case TRAP -> {
-                requireNoExtra(reader, extra, type);
-                yield new TrapObject(id, x, y, quizId, rewardType, triggerType);
+                ParsedSchemaFields schema = parseSchemaFields(reader, fields);
+                requireNoExtra(reader, schema.extra, type);
+                yield new TrapObject(id, x, y, schema.quizId, schema.reward, schema.trigger);
             }
             case EXIT -> {
-                requireNoExtra(reader, extra, type);
-                yield new ExitObject(id, x, y, quizId, rewardType, triggerType);
+                ParsedSchemaFields schema = parseSchemaFields(reader, fields);
+                requireNoExtra(reader, schema.extra, type);
+                yield new ExitObject(id, x, y, schema.quizId, schema.reward, schema.trigger);
             }
             case MOVE_PLATFORM -> {
-                String[] coords = extra.split(RecordParser.LIST_DELIMITER, -1);
+                ParsedSchemaFields schema = parseSchemaFields(reader, fields);
+                String[] coords = schema.extra.split(RecordParser.LIST_DELIMITER, -1);
                 if (coords.length != 2) {
-                    throw reader.error("MOVE_PLATFORM의 이동 좌표는 'x,y' 형식이어야 합니다: '" + extra + "'");
+                    throw reader.error("MOVE_PLATFORM의 이동 좌표는 'x,y' 형식이어야 합니다: '" + schema.extra + "'");
                 }
                 int targetX = reader.parseInt(coords[0], "이동 x", 0);
                 int targetY = reader.parseInt(coords[1], "이동 y", 0);
                 if (targetX >= mapWidth || targetY >= mapHeight) {
                     throw reader.error("MOVE_PLATFORM 목표 좌표(" + targetX + "," + targetY + ")가 맵 범위를 벗어납니다");
                 }
-                yield new MovePlatformObject(id, x, y, quizId, rewardType, triggerType, targetX, targetY);
+                yield new MovePlatformObject(id, x, y, schema.quizId, schema.reward, schema.trigger, targetX, targetY);
+            }
+            case BUTTON -> {
+                reader.requireFieldCount(fields, 6, "BUTTON 줄");
+                int quizId = reader.parseInt(fields[4], "quizId", 1);
+                List<String> doorIds = List.of(fields[5].trim().split(RecordParser.LIST_DELIMITER, -1));
+                yield new ButtonObject(id, x, y, quizId, doorIds);
+            }
+            case DOOR -> {
+                reader.requireFieldCount(fields, 5, "DOOR 줄");
+                int doorHeight = reader.parseInt(fields[4], "높이", 1);
+                yield new DoorObject(id, x, y, doorHeight);
+            }
+            case KEY -> {
+                reader.requireFieldCount(fields, 4, "KEY 줄");
+                yield new KeyObject(id, x, y);
+            }
+            case ITEM -> {
+                reader.requireFieldCount(fields, 6, "ITEM 줄");
+                ItemType itemType = parseEnum(reader, ItemType.class, fields[4].trim(), "아이템 종류");
+                int count = reader.parseInt(fields[5], "개수", 1);
+                yield new ItemObject(id, x, y, itemType, count);
+            }
+            case BOSS -> {
+                reader.requireFieldCount(fields, 6, "BOSS 줄");
+                String name = fields[4].trim();
+                int maxHp = reader.parseInt(fields[5], "체력", 1);
+                yield new BossObject(id, x, y, name, maxHp);
             }
         };
+    }
+
+    private record ParsedSchemaFields(int quizId, RewardType reward, TriggerType trigger, String extra) {
+    }
+
+    private static ParsedSchemaFields parseSchemaFields(LineReader reader, String[] fields) {
+        reader.requireFieldCount(fields, OBJECT_FIELD_COUNT, "오브젝트 줄(ID|TYPE|x|y|quizId|reward|trigger|extra)");
+        int quizId = reader.parseInt(fields[4], "quizId", 0);
+        RewardType reward = parseEnum(reader, RewardType.class, fields[5].trim(), "보상 유형");
+        TriggerType trigger = parseEnum(reader, TriggerType.class, fields[6].trim(), "트리거 유형");
+        String extra = fields[7].trim();
+        return new ParsedSchemaFields(quizId, reward, trigger, extra);
     }
 
     private static void requireNoExtra(LineReader reader, String extra, ObjectType type) {

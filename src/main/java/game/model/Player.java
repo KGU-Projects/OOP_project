@@ -2,8 +2,7 @@ package game.model;
 
 import game.common.GameConstants;
 import game.model.object.GameObject;
-
-import java.util.Optional;
+import game.model.object.TriggerType;
 
 /**
  * 스테이지 위를 이동하는 플레이어 엔티티.
@@ -28,6 +27,9 @@ public class Player {
     private boolean rightPressed;
     private boolean jumpPressed;
 
+    /** 전투 중단 직후 같은 오브젝트가 즉시 재발동하지 않도록 벗어날 때까지 억제한다. */
+    private String suppressedObjectId;
+
     public Player(double startX, double startY) {
         spawnAt(startX, startY);
     }
@@ -39,6 +41,7 @@ public class Player {
         this.velY = 0.0;
         this.onGround = false;
         this.facingRight = true;
+        this.suppressedObjectId = null;
         clearInputs();
     }
 
@@ -46,6 +49,10 @@ public class Player {
         leftPressed = false;
         rightPressed = false;
         jumpPressed = false;
+    }
+
+    public void suppressObjectUntilLeave(String objectId) {
+        this.suppressedObjectId = objectId;
     }
 
     public void setLeftPressed(boolean pressed) {
@@ -60,8 +67,8 @@ public class Player {
         this.jumpPressed = pressed;
     }
 
-    /** 한 프레임(dt초) 동안 이동·충돌·오브젝트 접촉을 처리하고 안내 문구가 있으면 반환한다. */
-    public Optional<String> update(double dt, GameState state) {
+    /** 한 프레임(dt초) 동안 이동·충돌·자동 트리거(STEP/NEAR/ENTER)를 처리한다. */
+    public GameObject.InteractionOutcome update(double dt, GameState state) {
         velX = 0.0;
         if (leftPressed && !rightPressed) {
             velX = -MOVE_SPEED;
@@ -79,7 +86,7 @@ public class Player {
 
         moveHorizontal(velX * dt, state);
         moveVertical(velY * dt, state);
-        return checkTouchObjects(state);
+        return checkAutomaticTriggers(state);
     }
 
     private void moveHorizontal(double dx, GameState state) {
@@ -151,36 +158,59 @@ public class Player {
             return true;
         }
         for (GameObject obj : stage.getObjects()) {
-            if (obj.isSolid(state) && obj.occupiesTile(tx, ty)) {
+            if (obj.isSolid(state) && obj.occupiesTile(tx, ty, state)) {
                 return true;
             }
         }
         return false;
     }
 
-    private Optional<String> checkTouchObjects(GameState state) {
-        for (GameObject obj : state.getStage().getObjects()) {
-            if (state.isObjectCollected(obj.getId()) || !overlaps(obj, 0.0)) {
-                continue;
-            }
-            Optional<String> message = obj.onTouch(state);
-            if (message.isPresent()) {
-                return message;
+    private GameObject.InteractionOutcome checkAutomaticTriggers(GameState state) {
+        if (suppressedObjectId != null) {
+            boolean stillInRange = state.getStage().findObject(suppressedObjectId)
+                    .map(obj -> overlaps(obj, state, obj.getProximityRange()))
+                    .orElse(false);
+            if (!stillInRange) {
+                suppressedObjectId = null;
             }
         }
-        return Optional.empty();
+
+        for (GameObject obj : state.getStage().getObjects()) {
+            if (obj.getId().equals(suppressedObjectId)) {
+                continue;
+            }
+
+            TriggerType trigger = obj.getTriggerType();
+            if (trigger == TriggerType.NEAR && overlaps(obj, state, obj.getProximityRange())) {
+                GameObject.InteractionOutcome outcome = obj.onProximity(state);
+                if (outcome.type() != GameObject.EffectType.NONE) {
+                    return outcome;
+                }
+            } else if (trigger == TriggerType.STEP && overlaps(obj, state, 0.0)) {
+                GameObject.InteractionOutcome outcome = obj.onStep(state);
+                if (outcome.type() != GameObject.EffectType.NONE) {
+                    return outcome;
+                }
+            } else if (trigger == TriggerType.ENTER && overlaps(obj, state, 0.0)) {
+                GameObject.InteractionOutcome outcome = obj.onEnter(state);
+                if (outcome.type() != GameObject.EffectType.NONE) {
+                    return outcome;
+                }
+            }
+        }
+        return GameObject.InteractionOutcome.none();
     }
 
-    public boolean overlaps(GameObject obj, double margin) {
+    public boolean overlaps(GameObject obj, GameState state, double margin) {
         double px1 = x - margin;
         double py1 = y - margin;
         double px2 = x + GameConstants.PLAYER_WIDTH + margin;
         double py2 = y + GameConstants.PLAYER_HEIGHT + margin;
 
-        double ox1 = obj.getX();
-        double oy1 = obj.getY();
-        double ox2 = obj.getX() + obj.getWidth();
-        double oy2 = obj.getY() + obj.getHeight();
+        double ox1 = obj.getEffectiveX(state);
+        double oy1 = obj.getEffectiveY(state);
+        double ox2 = ox1 + obj.getWidth();
+        double oy2 = oy1 + obj.getHeight();
 
         return px1 < ox2 && px2 > ox1 && py1 < oy2 && py2 > oy1;
     }

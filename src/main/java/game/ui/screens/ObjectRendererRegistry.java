@@ -27,12 +27,20 @@ final class ObjectRendererRegistry {
 
     static ObjectRendererRegistry createMonochromeDefault() {
         ObjectRendererRegistry registry = new ObjectRendererRegistry();
+        // 신규 스테이지 스키마 오브젝트
         registry.register(ObjectType.MONSTER, ObjectRendererRegistry::renderMonster);
         registry.register(ObjectType.CHEST, ObjectRendererRegistry::renderBox);
         registry.register(ObjectType.MIMIC, ObjectRendererRegistry::renderBox);
         registry.register(ObjectType.TRAP, ObjectRendererRegistry::renderTrap);
         registry.register(ObjectType.EXIT, ObjectRendererRegistry::renderExit);
         registry.register(ObjectType.MOVE_PLATFORM, ObjectRendererRegistry::renderMovePlatform);
+
+        // 기존 오브젝트
+        registry.register(ObjectType.BUTTON, ObjectRendererRegistry::renderButton);
+        registry.register(ObjectType.DOOR, ObjectRendererRegistry::renderDoor);
+        registry.register(ObjectType.KEY, ObjectRendererRegistry::renderKey);
+        registry.register(ObjectType.ITEM, ObjectRendererRegistry::renderItem);
+        registry.register(ObjectType.BOSS, ObjectRendererRegistry::renderBoss);
         return registry;
     }
 
@@ -104,8 +112,7 @@ final class ObjectRendererRegistry {
         drawCenteredTag(g2, "D", px + pw / 2, py + ph / 2, Color.WHITE);
     }
 
-    private static void renderMovePlatform(Graphics2D g2, GameObject obj, GameState state, Camera camera,
-            boolean nearby) {
+    private static void renderMovePlatform(Graphics2D g2, GameObject obj, GameState state, Camera camera, boolean nearby) {
         int px = camera.worldToScreenX(obj.getEffectiveX(state));
         int py = camera.worldToScreenY(obj.getEffectiveY(state));
         int pw = camera.toPixels(obj.getWidth());
@@ -116,6 +123,78 @@ final class ObjectRendererRegistry {
         g2.setColor(Color.BLACK);
         g2.drawRect(px, py, pw - 1, ph - 1);
         drawCenteredTag(g2, "A", px + pw / 2, py + ph / 2, Color.BLACK);
+    }
+
+    private static void renderButton(Graphics2D g2, GameObject obj, GameState state, Camera camera, boolean nearby) {
+        int px = camera.worldToScreenX(obj.getEffectiveX(state));
+        int py = camera.worldToScreenY(obj.getEffectiveY(state));
+        int pw = camera.toPixels(obj.getWidth());
+        int ph = camera.toPixels(obj.getHeight());
+
+        g2.setColor(Color.WHITE);
+        if (!obj.canInteract(state)) {
+            g2.drawRect(px + 4, py + 4, pw - 9, ph - 9);
+            drawCenteredTag(g2, "OK", px + pw / 2, py + ph / 2, Color.WHITE);
+        } else {
+            g2.fillRect(px + 4, py + 4, pw - 8, ph - 8);
+            drawCenteredTag(g2, "B", px + pw / 2, py + ph / 2, Color.BLACK);
+        }
+        if (nearby) {
+            drawPrompt(g2, obj.getInteractPrompt(), px + pw / 2, py - 6);
+        }
+    }
+
+    private static void renderDoor(Graphics2D g2, GameObject obj, GameState state, Camera camera, boolean nearby) {
+        int px = camera.worldToScreenX(obj.getEffectiveX(state));
+        int py = camera.worldToScreenY(obj.getEffectiveY(state));
+        int pw = camera.toPixels(obj.getWidth());
+        int ph = camera.toPixels(obj.getHeight());
+
+        g2.setColor(Color.WHITE);
+        if (!obj.isSolid(state)) {
+            g2.drawRect(px + 2, py + 2, pw - 5, ph - 5);
+        } else {
+            g2.fillRect(px + 2, py + 2, pw - 4, ph - 4);
+            g2.setColor(Color.BLACK);
+            g2.drawLine(px + 2, py + 2, px + pw - 3, py + ph - 3);
+            g2.drawLine(px + pw - 3, py + 2, px + 2, py + ph - 3);
+        }
+    }
+
+    private static void renderKey(Graphics2D g2, GameObject obj, GameState state, Camera camera, boolean nearby) {
+        int px = camera.worldToScreenX(obj.getEffectiveX(state));
+        int py = camera.worldToScreenY(obj.getEffectiveY(state));
+        int pw = camera.toPixels(obj.getWidth());
+        int ph = camera.toPixels(obj.getHeight());
+
+        g2.setColor(Color.WHITE);
+        g2.fillRect(px + 6, py + 6, pw - 12, ph - 12);
+        drawCenteredTag(g2, "K", px + pw / 2, py + ph / 2, Color.BLACK);
+    }
+
+    private static void renderItem(Graphics2D g2, GameObject obj, GameState state, Camera camera, boolean nearby) {
+        int px = camera.worldToScreenX(obj.getEffectiveX(state));
+        int py = camera.worldToScreenY(obj.getEffectiveY(state));
+        int pw = camera.toPixels(obj.getWidth());
+        int ph = camera.toPixels(obj.getHeight());
+
+        g2.setColor(Color.WHITE);
+        g2.drawRect(px + 6, py + 6, pw - 13, ph - 13);
+        drawCenteredTag(g2, "I", px + pw / 2, py + ph / 2, Color.WHITE);
+    }
+
+    private static void renderBoss(Graphics2D g2, GameObject obj, GameState state, Camera camera, boolean nearby) {
+        int px = camera.worldToScreenX(obj.getEffectiveX(state));
+        int py = camera.worldToScreenY(obj.getEffectiveY(state));
+        int pw = camera.toPixels(obj.getWidth());
+        int ph = camera.toPixels(obj.getHeight());
+
+        g2.setColor(Color.WHITE);
+        g2.fillRect(px + 2, py + 2, pw - 4, ph - 4);
+        drawCenteredTag(g2, "BOSS", px + pw / 2, py + ph / 2, Color.BLACK);
+        if (nearby) {
+            drawPrompt(g2, obj.getInteractPrompt(), px + pw / 2, py - 6);
+        }
     }
 
     static void drawCenteredTag(Graphics2D g2, String text, int cx, int cy, Color color) {

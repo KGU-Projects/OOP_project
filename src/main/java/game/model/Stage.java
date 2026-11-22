@@ -1,6 +1,7 @@
 package game.model;
 
 import game.common.GameConstants;
+import game.model.object.BossObject;
 import game.model.object.GameObject;
 
 import java.util.List;
@@ -9,9 +10,13 @@ import java.util.Optional;
 /** 스테이지 하나: 정보(번호|제목|개념|가로|세로), 지형 격자, 오브젝트 목록. */
 public class Stage {
 
+    private static final int DEFAULT_THEME = 1;
+
     private final int number;
     private final String title;
     private final String concept;
+    private final StageType type;
+    private final int theme;
     private final int width;
     private final int height;
     private final Tile[][] terrain;
@@ -21,9 +26,17 @@ public class Stage {
 
     public Stage(int number, String title, String concept,
             Tile[][] terrain, int startTileX, int startTileY, List<GameObject> objects) {
+        this(number, title, concept, inferType(objects), DEFAULT_THEME, terrain, startTileX, startTileY, objects);
+    }
+
+    /** 기존 호출부(StageType, theme 포함) 호환 생성자 */
+    public Stage(int number, String title, String concept, StageType type, int theme,
+            Tile[][] terrain, int startTileX, int startTileY, List<GameObject> objects) {
         this.number = number;
         this.title = title;
         this.concept = concept;
+        this.type = (type != null) ? type : inferType(objects);
+        this.theme = theme;
         this.height = terrain.length;
         this.width = terrain[0].length;
         this.terrain = copyOf(terrain);
@@ -32,10 +45,11 @@ public class Stage {
         this.objects = List.copyOf(objects);
     }
 
-    /** 기존 호출부 호환용 생성자 */
-    public Stage(int number, String title, String concept, StageType ignoredType, int ignoredTheme,
-            Tile[][] terrain, int startTileX, int startTileY, List<GameObject> objects) {
-        this(number, title, concept, terrain, startTileX, startTileY, objects);
+    private static StageType inferType(List<GameObject> objects) {
+        if (objects != null && objects.stream().anyMatch(o -> o instanceof BossObject)) {
+            return StageType.BOSS;
+        }
+        return StageType.NORMAL;
     }
 
     private static Tile[][] copyOf(Tile[][] source) {
@@ -79,6 +93,14 @@ public class Stage {
 
     public String getConcept() {
         return concept;
+    }
+
+    public StageType getType() {
+        return type;
+    }
+
+    public int getTheme() {
+        return theme;
     }
 
     public int getWidth() {

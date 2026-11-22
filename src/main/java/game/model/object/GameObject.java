@@ -2,10 +2,11 @@ package game.model.object;
 
 import game.model.GameState;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
- * 맵 위의 오브젝트. 불변 정의와 다형적 상호작용·충돌 규칙을 가진다.
+ * 맵 위의 오브젝트. 기존 오브젝트와 신규 스키마 오브젝트의 공통 부모 클래스.
  */
 public abstract class GameObject {
 
@@ -41,6 +42,12 @@ public abstract class GameObject {
     private final RewardType rewardType;
     private final TriggerType triggerType;
 
+    /** 기존 오브젝트(Boss, Button, Door, Item, Key) 호환 생성자 */
+    protected GameObject(String id, int x, int y) {
+        this(id, x, y, 0, RewardType.NONE, TriggerType.OPEN);
+    }
+
+    /** 신규 8칸 스키마 오브젝트 생성자 */
     protected GameObject(String id, int x, int y, int quizId, RewardType rewardType, TriggerType triggerType) {
         this.id = id;
         this.x = x;
@@ -86,6 +93,14 @@ public abstract class GameObject {
         return triggerType;
     }
 
+    public List<String> getLinkedIds() {
+        return List.of();
+    }
+
+    public Optional<ObjectType> getLinkedType() {
+        return Optional.empty();
+    }
+
     public int getWidth() {
         return 1;
     }
@@ -106,7 +121,7 @@ public abstract class GameObject {
     }
 
     public boolean isVisible(GameState state) {
-        return true;
+        return !state.isObjectCollected(getId());
     }
 
     public double getProximityRange() {
