@@ -4,6 +4,7 @@ import game.common.ScreenType;
 import game.model.AnswerResult;
 import game.model.GameState;
 import game.model.ItemType;
+import game.model.SaveData;
 import game.model.User;
 import game.model.object.GameObject;
 import game.model.quiz.Quiz;
@@ -12,25 +13,42 @@ import game.service.UserService;
 import game.ui.BaseScreen;
 import game.ui.Camera;
 import game.ui.ScreenManager;
+import game.ui.components.GameButton;
 
 import javax.swing.AbstractAction;
 import javax.swing.ActionMap;
+import javax.swing.BorderFactory;
+import javax.swing.Box;
+import javax.swing.BoxLayout;
 import javax.swing.InputMap;
 import javax.swing.JComponent;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
+import javax.swing.border.EmptyBorder;
+import javax.swing.border.LineBorder;
+import javax.swing.border.MatteBorder;
 import java.awt.BorderLayout;
+import java.awt.CardLayout;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Dimension;
+import java.awt.Font;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.GridLayout;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-/**
- * 메인 게임 화면.
- * 입력 처리, 40 x 20 카메라 추적, GameService 규칙 위임, 퀴즈 화면 전환을 조율한다.
- */
 public class GameScreen extends BaseScreen {
 
     private static final int VIEWPORT_COLS = 40;
@@ -38,6 +56,10 @@ public class GameScreen extends BaseScreen {
     private static final int FRAME_DELAY_MS = 16;
     private static final double FIXED_DT = 0.016;
     private static final int QUIZ_TIME_LIMIT_SECONDS = 20;
+    private static final int PAUSE_DRAWER_WIDTH = 340;
+    private static final Color BG = Color.BLACK;
+    private static final Color FG = Color.WHITE;
+    private static final DateTimeFormatter SAVE_TIME_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
     private final UserService userService;
     private final GameService gameService;
@@ -45,6 +67,13 @@ public class GameScreen extends BaseScreen {
     private final Camera camera;
     private final MapCanvas canvas;
     private final Timer gameLoop;
+
+    private final PauseOverlayPanel pauseOverlay;
+    private final CardLayout pauseCardLayout = new CardLayout();
+    private final JPanel pauseCardContainer = new JPanel(pauseCardLayout);
+    private final JPanel saveSlotListPanel = new JPanel();
+    private final JLabel pauseFeedbackLabel = new JLabel(" ");
+    private boolean paused = false;
 
     private GameState lastObservedState;
     private QuizBattleLauncher quizLauncher;
@@ -65,7 +94,10 @@ public class GameScreen extends BaseScreen {
                 this::findNearbyInteractable,
                 this::currentStatusText);
 
-        panel.add(canvas, BorderLayout.CENTER);
+        this.pauseOverlay = createPauseOverlay();
+
+        LayeredGameContainer layeredRoot = new LayeredGameContainer(canvas, pauseOverlay);
+        panel.add(layeredRoot, BorderLayout.CENTER);
         setupKeyBindings();
 
         this.gameLoop = new Timer(FRAME_DELAY_MS, e -> onTick());
@@ -79,6 +111,7 @@ public class GameScreen extends BaseScreen {
             state.getPlayer().clearInputs();
             if (state != lastObservedState) {
                 lastObservedState = state;
+                setPaused(false);
                 camera.snapTo(state.getPlayer(), state.getStage());
                 showStatus("STAGE " + state.getStage().getNumber() + " - " + state.getStage().getTitle(), 2.0);
             }
@@ -86,7 +119,13 @@ public class GameScreen extends BaseScreen {
         if (!gameLoop.isRunning()) {
             gameLoop.start();
         }
-        SwingUtilities.invokeLater(canvas::requestFocusInWindow);
+        SwingUtilities.invokeLater(() -> {
+            if (paused) {
+                pauseOverlay.requestFocusInWindow();
+            } else {
+                canvas.requestFocusInWindow();
+            }
+        });
     }
 
     @Override
@@ -123,11 +162,206 @@ public class GameScreen extends BaseScreen {
         this.statusTimer = durationSec;
     }
 
-    // ---------------------------------------------------------------------
-    // 게임 루프
-    // ---------------------------------------------------------------------
+    private PauseOverlayPanel createPauseOverlay() {
+        PauseOverlayPanel overlay = new PauseOverlayPanel();
+        overlay.setVisible(false);
+
+        JPanel leftDrawer = new JPanel(new BorderLayout(0, 18));
+        leftDrawer.setPreferredSize(new Dimension(PAUSE_DRAWER_WIDTH, 0));
+        leftDrawer.setOpaque(true);
+        leftDrawer.setBackground(BG);
+        leftDrawer.setBorder(BorderFactory.createCompoundBorder(
+                new MatteBorder(0, 0, 0, 2, FG),
+                new EmptyBorder(36, 28, 32, 28)));
+
+        JPanel headerPanel = new JPanel(new BorderLayout(0, 8));
+        headerPanel.setOpaque(false);
+        headerPanel.setBorder(BorderFactory.createCompoundBorder(
+                new MatteBorder(0, 0, 1, 0, FG),
+                new EmptyBorder(0, 0, 12, 0)));
+
+        JLabel titleLabel = new JLabel("PAUSED");
+        titleLabel.setFont(new Font(Font.MONOSPACED, Font.BOLD, 30));
+        titleLabel.setForeground(FG);
+        headerPanel.add(titleLabel, BorderLayout.NORTH);
+
+        pauseFeedbackLabel.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 13));
+        pauseFeedbackLabel.setForeground(FG);
+        headerPanel.add(pauseFeedbackLabel, BorderLayout.SOUTH);
+        leftDrawer.add(headerPanel, BorderLayout.NORTH);
+
+        pauseCardContainer.setOpaque(false);
+        pauseCardContainer.add(createPauseMainButtons(), "MAIN");
+        pauseCardContainer.add(createPauseSavePicker(), "SAVE");
+        leftDrawer.add(pauseCardContainer, BorderLayout.CENTER);
+
+        JLabel hintLabel = new JLabel("[ESC] RESUME");
+        hintLabel.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        hintLabel.setForeground(FG);
+        leftDrawer.add(hintLabel, BorderLayout.SOUTH);
+
+        overlay.add(leftDrawer, BorderLayout.WEST);
+        return overlay;
+    }
+
+    private JPanel createPauseMainButtons() {
+        JPanel wrapper = new JPanel(new BorderLayout());
+        wrapper.setOpaque(false);
+
+        JPanel buttonStack = new JPanel(new GridLayout(4, 1, 0, 14));
+        buttonStack.setOpaque(false);
+
+        buttonStack.add(stylePauseButton(new GameButton("계속하기 (RESUME)", () -> setPaused(false))));
+        buttonStack.add(stylePauseButton(new GameButton("저장하기 (SAVE)", this::openSavePicker)));
+        buttonStack.add(stylePauseButton(new GameButton("불러오기 (LOAD)", this::openLoadFromPause)));
+        buttonStack.add(stylePauseButton(new GameButton("나가기 (EXIT)", this::exitToTitle)));
+
+        wrapper.add(buttonStack, BorderLayout.NORTH);
+        return wrapper;
+    }
+
+    private JPanel createPauseSavePicker() {
+        JPanel picker = new JPanel(new BorderLayout(0, 12));
+        picker.setOpaque(false);
+
+        JLabel subTitle = new JLabel("[SAVE SLOT SELECT]");
+        subTitle.setFont(new Font(Font.MONOSPACED, Font.BOLD, 14));
+        subTitle.setForeground(FG);
+        picker.add(subTitle, BorderLayout.NORTH);
+
+        saveSlotListPanel.setLayout(new BoxLayout(saveSlotListPanel, BoxLayout.Y_AXIS));
+        saveSlotListPanel.setOpaque(false);
+        picker.add(saveSlotListPanel, BorderLayout.CENTER);
+
+        GameButton backBtn = stylePauseButton(new GameButton("뒤로 (BACK)", () -> {
+            pauseFeedbackLabel.setText(" ");
+            pauseCardLayout.show(pauseCardContainer, "MAIN");
+        }));
+        picker.add(backBtn, BorderLayout.SOUTH);
+
+        return picker;
+    }
+
+    private GameButton stylePauseButton(GameButton btn) {
+        btn.setPreferredSize(new Dimension(PAUSE_DRAWER_WIDTH - 56, 48));
+        btn.setMaximumSize(new Dimension(Integer.MAX_VALUE, 48));
+        btn.setAlignmentX(Component.LEFT_ALIGNMENT);
+        btn.setFont(new Font(Font.MONOSPACED, Font.BOLD, 14));
+        btn.setBackground(BG);
+        btn.setForeground(FG);
+        btn.setRolloverEnabled(false);
+        btn.setBorder(BorderFactory.createCompoundBorder(
+                new LineBorder(FG, 2),
+                new EmptyBorder(5, 14, 5, 14)));
+
+        btn.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                if (btn.isEnabled()) {
+                    btn.setBackground(FG);
+                    btn.setForeground(BG);
+                }
+            }
+
+            @Override
+            public void mouseExited(MouseEvent e) {
+                btn.setBackground(BG);
+                btn.setForeground(FG);
+            }
+        });
+        return btn;
+    }
+
+    private void openSavePicker() {
+        refreshSaveSlotButtons();
+        pauseCardLayout.show(pauseCardContainer, "SAVE");
+    }
+
+    private void refreshSaveSlotButtons() {
+        saveSlotListPanel.removeAll();
+        if (gameService == null) {
+            return;
+        }
+        String nickname = gameService.getCurrentUser().getNickname();
+        List<Optional<SaveData>> slots = gameService.getAllSaveSlots(nickname);
+
+        for (int i = 0; i < slots.size(); i++) {
+            final int slotNo = i + 1;
+            Optional<SaveData> dataOpt = slots.get(i);
+            String label;
+            if (dataOpt.isPresent()) {
+                SaveData d = dataOpt.get();
+                label = String.format("SLOT %d | STG %d (%s)",
+                        slotNo, d.getNextStageNo(), d.getSavedAt().format(SAVE_TIME_FMT));
+            } else {
+                label = String.format("SLOT %d | [EMPTY]", slotNo);
+            }
+
+            if (i > 0) {
+                saveSlotListPanel.add(Box.createRigidArea(new Dimension(0, 10)));
+            }
+            GameButton slotBtn = stylePauseButton(new GameButton(label, () -> performSaveToSlot(slotNo)));
+            slotBtn.setFont(new Font(Font.MONOSPACED, Font.BOLD, 12));
+            saveSlotListPanel.add(slotBtn);
+        }
+        saveSlotListPanel.revalidate();
+        saveSlotListPanel.repaint();
+    }
+
+    private void performSaveToSlot(int slotNo) {
+        if (gameService == null) {
+            return;
+        }
+        try {
+            gameService.saveGame(slotNo);
+            pauseFeedbackLabel.setText(">> SLOT " + slotNo + " SAVED");
+            showStatus("슬롯 " + slotNo + "에 저장되었습니다", 2.0);
+            refreshSaveSlotButtons();
+        } catch (RuntimeException ex) {
+            pauseFeedbackLabel.setText(">> SAVE ERROR: " + ex.getMessage());
+        }
+    }
+
+    private void openLoadFromPause() {
+        if (screenManager == null) {
+            return;
+        }
+        if (screenManager.getScreen(ScreenType.LOAD) instanceof LoadScreen loadScreen) {
+            loadScreen.setReturnScreen(ScreenType.GAME);
+        }
+        screenManager.show(ScreenType.LOAD);
+    }
+
+    private void exitToTitle() {
+        setPaused(false);
+        if (screenManager != null) {
+            screenManager.show(ScreenType.START);
+        }
+    }
+
+    private void setPaused(boolean value) {
+        this.paused = value;
+        GameState state = currentState();
+        if (state != null) {
+            state.getPlayer().clearInputs();
+        }
+        if (value) {
+            pauseFeedbackLabel.setText(" ");
+            pauseCardLayout.show(pauseCardContainer, "MAIN");
+            pauseOverlay.setVisible(true);
+            SwingUtilities.invokeLater(pauseOverlay::requestFocusInWindow);
+        } else {
+            pauseOverlay.setVisible(false);
+            SwingUtilities.invokeLater(canvas::requestFocusInWindow);
+        }
+        panel.revalidate();
+        panel.repaint();
+    }
 
     private void onTick() {
+        if (paused) {
+            return;
+        }
         GameState state = currentState();
         if (state == null) {
             return;
@@ -148,20 +382,14 @@ public class GameScreen extends BaseScreen {
             return;
         }
         switch (outcome.type()) {
-            case NONE -> {
-            }
             case MESSAGE, STAGE_CLEAR -> showStatus(outcome.message(), 2.2);
             case START_QUIZ -> openQuizFor(outcome.source());
         }
     }
 
-    // ---------------------------------------------------------------------
-    // 입력 바인딩
-    // ---------------------------------------------------------------------
-
     private void setupKeyBindings() {
-        InputMap im = canvas.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
-        ActionMap am = canvas.getActionMap();
+        InputMap im = panel.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
+        ActionMap am = panel.getActionMap();
 
         bindMoveKey(im, am, KeyEvent.VK_LEFT, "left", (p, down) -> p.setLeftPressed(down));
         bindMoveKey(im, am, KeyEvent.VK_A, "a", (p, down) -> p.setLeftPressed(down));
@@ -171,8 +399,16 @@ public class GameScreen extends BaseScreen {
         bindMoveKey(im, am, KeyEvent.VK_W, "w", (p, down) -> p.setJumpPressed(down));
         bindMoveKey(im, am, KeyEvent.VK_UP, "up", (p, down) -> p.setJumpPressed(down));
 
-        bindAction(im, am, KeyStroke.getKeyStroke(KeyEvent.VK_E, 0, false), "interact", this::tryInteract);
-        bindAction(im, am, KeyStroke.getKeyStroke(KeyEvent.VK_H, 0, false), "use_potion", this::tryUsePotion);
+        bindAction(im, am, KeyStroke.getKeyStroke(KeyEvent.VK_E, 0, false), "interact", () -> {
+            if (!paused) {
+                tryInteract();
+            }
+        });
+        bindAction(im, am, KeyStroke.getKeyStroke(KeyEvent.VK_H, 0, false), "use_potion", () -> {
+            if (!paused) {
+                tryUsePotion();
+            }
+        });
         bindAction(im, am, KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0, false), "escape", this::handleEscape);
     }
 
@@ -183,6 +419,9 @@ public class GameScreen extends BaseScreen {
 
     private void bindMoveKey(InputMap im, ActionMap am, int keyCode, String prefix, PlayerInputSetter setter) {
         bindAction(im, am, KeyStroke.getKeyStroke(keyCode, 0, false), prefix + "_down", () -> {
+            if (paused) {
+                return;
+            }
             GameState state = currentState();
             if (state != null) {
                 setter.apply(state.getPlayer(), true);
@@ -205,10 +444,6 @@ public class GameScreen extends BaseScreen {
             }
         });
     }
-
-    // ---------------------------------------------------------------------
-    // 상호작용 & 퀴즈 전투 연결
-    // ---------------------------------------------------------------------
 
     private void tryInteract() {
         findNearbyInteractable().ifPresent(target -> {
@@ -267,7 +502,6 @@ public class GameScreen extends BaseScreen {
             }
             case STAGE_SELECT -> screenManager.show(ScreenType.START);
             case VICTORY, NO_QUIZ, ABORTED, GO_RECOVER -> {
-                // QuizBattleLauncher가 이미 GAME 화면으로 복귀시킨 뒤 호출된다.
             }
         }
     }
@@ -294,8 +528,55 @@ public class GameScreen extends BaseScreen {
     }
 
     private void handleEscape() {
-        if (screenManager != null) {
-            screenManager.show(ScreenType.START);
+        setPaused(!paused);
+    }
+
+    private static final class LayeredGameContainer extends JPanel {
+        private static final long serialVersionUID = 1L;
+        private final JComponent baseLayer;
+        private final JComponent overlayLayer;
+
+        private LayeredGameContainer(JComponent baseLayer, JComponent overlayLayer) {
+            super(null);
+            this.baseLayer = baseLayer;
+            this.overlayLayer = overlayLayer;
+            // overlayLayer를 먼저 추가해야 Swing에서 최상단에 그려진다
+            add(overlayLayer);
+            add(baseLayer);
+        }
+
+        @Override
+        public boolean isOptimizedDrawingEnabled() {
+            return !overlayLayer.isVisible();
+        }
+
+        @Override
+        public void doLayout() {
+            int w = getWidth();
+            int h = getHeight();
+            baseLayer.setBounds(0, 0, w, h);
+            overlayLayer.setBounds(0, 0, w, h);
+        }
+    }
+
+    private static final class PauseOverlayPanel extends JPanel {
+        private static final long serialVersionUID = 1L;
+
+        private PauseOverlayPanel() {
+            super(new BorderLayout());
+            setOpaque(false);
+            setFocusable(true);
+            addMouseListener(new MouseAdapter() {
+            });
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setColor(new Color(0, 0, 0, 180));
+            g2.fillRect(0, 0, getWidth(), getHeight());
+            g2.dispose();
+            super.paintComponent(g);
         }
     }
 }

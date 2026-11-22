@@ -1,5 +1,6 @@
 package game.service;
 
+import game.common.GameConstants;
 import game.model.AnswerResult;
 import game.model.GameState;
 import game.model.ItemType;
@@ -13,6 +14,11 @@ import game.repository.QuizRepository;
 import game.repository.SaveRepository;
 import game.repository.StageRepository;
 
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.EnumMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /** UI와 데이터 사이 연결 및 게임 규칙 처리 */
@@ -20,6 +26,7 @@ public class GameService {
     private static final int FIRST_STAGE = 1;
     private static final int MAX_HP = 3;
     private static final int WRONG_ANSWER_DAMAGE = 1;
+    private static final String DEFAULT_NICKNAME = "Player";
 
     private final QuizRepository quizRepository;
     private final StageRepository stageRepository;
@@ -39,21 +46,85 @@ public class GameService {
     public void startNewGame(User user) {
         Stage firstStage = stageRepository.findByNumber(FIRST_STAGE)
                 .orElseThrow(() -> new IllegalStateException("1스테이지 파일이 없습니다"));
-        this.currentUser = user;
+        this.currentUser = (user != null) ? user : User.createNew(DEFAULT_NICKNAME, LocalDateTime.now());
         this.state = new GameState(firstStage, MAX_HP, null);
         this.currentSlot = 0;
         cancelQuiz();
     }
 
     public void continueGame(User user, int slot) {
-        SaveData save = saveRepository.find(user.getNickname(), slot)
+        User resolvedUser = (user != null) ? user : getCurrentUser();
+        SaveData save = saveRepository.find(resolvedUser.getNickname(), slot)
                 .orElseThrow(() -> new IllegalStateException(slot + "번 저장 칸이 비어 있습니다"));
         Stage stage = stageRepository.findByNumber(save.getNextStageNo())
                 .orElseThrow(() -> new IllegalStateException("다음 스테이지 파일이 없습니다"));
         this.state = new GameState(stage, MAX_HP, save);
-        this.currentUser = user;
+        this.currentUser = resolvedUser;
         this.currentSlot = slot;
         cancelQuiz();
+    }
+
+    public SaveData saveGame(int slot) {
+        if (state == null) {
+            throw new IllegalStateException("진행 중인 게임이 없습니다");
+        }
+        User user = getCurrentUser();
+        int currentStageNo = state.getStage().getNumber();
+        int clearedStage = state.isStageCleared()
+                ? currentStageNo
+                : Math.max(0, currentStageNo - 1);
+
+        Map<ItemType, Integer> inventory = new EnumMap<>(ItemType.class);
+        for (ItemType type : ItemType.values()) {
+            int count = state.getItemCount(type);
+            if (count > 0) {
+                inventory.put(type, count);
+            }
+        }
+
+        SaveData data = new SaveData(
+                clearedStage,
+                state.getHp(),
+                state.getScore(),
+                inventory,
+                LocalDateTime.now());
+        saveRepository.save(user.getNickname(), slot, data);
+        this.currentSlot = slot;
+        return data;
+    }
+
+    public List<Optional<SaveData>> getAllSaveSlots(String nickname) {
+        String target = (nickname == null || nickname.isBlank()) ? getCurrentUser().getNickname() : nickname;
+        List<Optional<SaveData>> slots = new ArrayList<>(GameConstants.SAVE_SLOT_COUNT);
+        for (int slot = 1; slot <= GameConstants.SAVE_SLOT_COUNT; slot++) {
+            slots.add(saveRepository.find(target, slot));
+        }
+        return slots;
+    }
+
+    public User getCurrentUser() {
+        if (currentUser == null) {
+            currentUser = User.createNew(DEFAULT_NICKNAME, LocalDateTime.now());
+        }
+        return currentUser;
+    }
+
+    public int getCurrentSlot() {
+        return currentSlot;
+    }
+
+    public boolean hasStage(int stageNo) {
+        return stageRepository.findByNumber(stageNo).isPresent();
+    }
+
+    public boolean loadStage(int stageNo) {
+        Optional<Stage> nextStage = stageRepository.findByNumber(stageNo);
+        if (nextStage.isEmpty()) {
+            return false;
+        }
+        this.state = new GameState(nextStage.get(), MAX_HP, null);
+        cancelQuiz();
+        return true;
     }
 
     public boolean canRestartFromSave() {
