@@ -9,12 +9,12 @@ import game.model.quiz.Quiz;
 import game.service.GameService;
 import game.ui.BaseScreen;
 import game.ui.Camera;
+import game.ui.ImageLoader;
 import game.ui.ScreenManager;
 import game.ui.components.GameButton;
 
 import javax.swing.AbstractAction;
 import javax.swing.ActionMap;
-import javax.swing.BorderFactory;
 import javax.swing.InputMap;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
@@ -23,20 +23,21 @@ import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 import javax.swing.border.EmptyBorder;
-import javax.swing.border.LineBorder;
-import javax.swing.border.MatteBorder;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Font;
+import java.awt.FontMetrics;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.GridLayout;
+import java.awt.RenderingHints;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.image.BufferedImage;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -48,10 +49,12 @@ public class GameScreen extends BaseScreen {
     private static final double FIXED_DT = 0.016;
     private static final int QUIZ_TIME_LIMIT_SECONDS = 20;
     private static final int PAUSE_DRAWER_WIDTH = 340;
+    private static final String PLACEHOLDER_TEXTURE = "example-picture.png";
     private static final Color BG = Color.BLACK;
     private static final Color FG = Color.WHITE;
 
     private final GameService gameService;
+    private final BufferedImage placeholderTexture;
 
     private final Camera camera;
     private final MapCanvas canvas;
@@ -68,8 +71,14 @@ public class GameScreen extends BaseScreen {
     private double statusTimer = 0.0;
 
     public GameScreen(ScreenManager screenManager, GameService gameService) {
+        this(screenManager, gameService, new ImageLoader());
+    }
+
+    public GameScreen(ScreenManager screenManager, GameService gameService, ImageLoader imageLoader) {
         super(screenManager, new BorderLayout());
         this.gameService = gameService;
+        ImageLoader loader = (imageLoader != null) ? imageLoader : new ImageLoader();
+        this.placeholderTexture = loader.get(PLACEHOLDER_TEXTURE).orElse(null);
 
         this.camera = new Camera(VIEWPORT_COLS, VIEWPORT_ROWS);
         this.canvas = new MapCanvas(
@@ -160,19 +169,13 @@ public class GameScreen extends BaseScreen {
         PauseOverlayPanel overlay = new PauseOverlayPanel();
         overlay.setVisible(false);
 
-        JPanel leftDrawer = new JPanel(new BorderLayout(0, 18));
+        TexturedPanel leftDrawer = new TexturedPanel(placeholderTexture, 175, new BorderLayout(0, 18));
         leftDrawer.setPreferredSize(new Dimension(PAUSE_DRAWER_WIDTH, 0));
-        leftDrawer.setOpaque(true);
-        leftDrawer.setBackground(BG);
-        leftDrawer.setBorder(BorderFactory.createCompoundBorder(
-                new MatteBorder(0, 0, 0, 2, FG),
-                new EmptyBorder(36, 28, 32, 28)));
+        leftDrawer.setBorder(new EmptyBorder(36, 28, 32, 28));
 
         JPanel headerPanel = new JPanel(new BorderLayout());
         headerPanel.setOpaque(false);
-        headerPanel.setBorder(BorderFactory.createCompoundBorder(
-                new MatteBorder(0, 0, 1, 0, FG),
-                new EmptyBorder(0, 0, 12, 0)));
+        headerPanel.setBorder(new EmptyBorder(0, 0, 12, 0));
 
         JLabel titleLabel = new JLabel("정지");
         titleLabel.setFont(new Font(Font.MONOSPACED, Font.BOLD, 30));
@@ -185,23 +188,19 @@ public class GameScreen extends BaseScreen {
 
         JPanel buttonStack = new JPanel(new GridLayout(3, 1, 0, 14));
         buttonStack.setOpaque(false);
-        buttonStack.add(stylePauseButton(new GameButton("계속하기", () -> setPaused(false))));
-        buttonStack.add(stylePauseButton(new GameButton("불러오기", this::openLoadFromPause)));
-        buttonStack.add(stylePauseButton(new GameButton("나가기", this::exitToTitle)));
+        buttonStack.add(createPauseButton("계속하기", () -> setPaused(false)));
+        buttonStack.add(createPauseButton("불러오기", this::openLoadFromPause));
+        buttonStack.add(createPauseButton("나가기", this::exitToTitle));
 
         buttonWrapper.add(buttonStack, BorderLayout.NORTH);
         leftDrawer.add(buttonWrapper, BorderLayout.CENTER);
-
-        JLabel hintLabel = new JLabel("[ESC] 계속하기");
-        hintLabel.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
-        hintLabel.setForeground(FG);
-        leftDrawer.add(hintLabel, BorderLayout.SOUTH);
 
         overlay.add(leftDrawer, BorderLayout.WEST);
         return overlay;
     }
 
-    private GameButton stylePauseButton(GameButton btn) {
+    private GameButton createPauseButton(String label, Runnable action) {
+        TexturedPauseButton btn = new TexturedPauseButton(label, action, placeholderTexture);
         btn.setPreferredSize(new Dimension(PAUSE_DRAWER_WIDTH - 56, 48));
         btn.setMaximumSize(new Dimension(Integer.MAX_VALUE, 48));
         btn.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -209,25 +208,8 @@ public class GameScreen extends BaseScreen {
         btn.setBackground(BG);
         btn.setForeground(FG);
         btn.setRolloverEnabled(false);
-        btn.setBorder(BorderFactory.createCompoundBorder(
-                new LineBorder(FG, 2),
-                new EmptyBorder(5, 14, 5, 14)));
-
-        btn.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mouseEntered(MouseEvent e) {
-                if (btn.isEnabled()) {
-                    btn.setBackground(FG);
-                    btn.setForeground(BG);
-                }
-            }
-
-            @Override
-            public void mouseExited(MouseEvent e) {
-                btn.setBackground(BG);
-                btn.setForeground(FG);
-            }
-        });
+        btn.setFocusPainted(false);
+        btn.setBorder(new EmptyBorder(5, 14, 5, 14));
         return btn;
     }
 
@@ -506,6 +488,85 @@ public class GameScreen extends BaseScreen {
             g2.fillRect(0, 0, getWidth(), getHeight());
             g2.dispose();
             super.paintComponent(g);
+        }
+    }
+
+    private static final class TexturedPanel extends JPanel {
+        private static final long serialVersionUID = 1L;
+        private final BufferedImage texture;
+        private final int overlayAlpha;
+
+        private TexturedPanel(BufferedImage texture, int overlayAlpha, BorderLayout layout) {
+            super(layout);
+            this.texture = texture;
+            this.overlayAlpha = overlayAlpha;
+            setOpaque(true);
+            setBackground(BG);
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            super.paintComponent(g);
+            if (texture != null) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+                g2.drawImage(texture, 0, 0, getWidth(), getHeight(), this);
+                g2.setColor(new Color(0, 0, 0, overlayAlpha));
+                g2.fillRect(0, 0, getWidth(), getHeight());
+                g2.dispose();
+            }
+        }
+    }
+
+    private static final class TexturedPauseButton extends GameButton {
+        private static final long serialVersionUID = 1L;
+        private final BufferedImage texture;
+        private boolean hovered = false;
+
+        private TexturedPauseButton(String text, Runnable action, BufferedImage texture) {
+            super(text, action);
+            this.texture = texture;
+            addMouseListener(new MouseAdapter() {
+                @Override
+                public void mouseEntered(MouseEvent e) {
+                    if (isEnabled()) {
+                        hovered = true;
+                        setBackground(FG);
+                        setForeground(BG);
+                        repaint();
+                    }
+                }
+
+                @Override
+                public void mouseExited(MouseEvent e) {
+                    hovered = false;
+                    setBackground(BG);
+                    setForeground(FG);
+                    repaint();
+                }
+            });
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            if (texture == null) {
+                super.paintComponent(g);
+                return;
+            }
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+            g2.drawImage(texture, 0, 0, getWidth(), getHeight(), this);
+            g2.setColor(hovered ? new Color(255, 255, 255, 200) : new Color(0, 0, 0, 145));
+            g2.fillRect(0, 0, getWidth(), getHeight());
+
+            g2.setFont(getFont());
+            g2.setColor(hovered ? BG : FG);
+            FontMetrics fm = g2.getFontMetrics();
+            String text = getText();
+            int textX = (getWidth() - fm.stringWidth(text)) / 2;
+            int textY = (getHeight() - fm.getHeight()) / 2 + fm.getAscent();
+            g2.drawString(text, textX, textY);
+            g2.dispose();
         }
     }
 }
