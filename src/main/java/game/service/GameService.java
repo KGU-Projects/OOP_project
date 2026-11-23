@@ -183,7 +183,8 @@ public class GameService {
 
     /** 몬스터·미믹·함정 등 퀴즈를 가진 오브젝트와 연결된 문제를 연다. */
     public Optional<Quiz> openQuiz(GameObject source) {
-        if (state == null || source == null || state.isObjectResolved(source.getId())) {
+        // 게임 시작 안됨 or 체력이 0 or 퀴즈를 낼 오브젝트가 없음 or 이미 해결한 오브젝트면, 퀴즈를 열지 않음
+        if (state == null || state.isDead() || source == null || state.isObjectResolved(source.getId())) {
             return Optional.empty();
         }
         int quizId = source.getQuizId();
@@ -203,6 +204,10 @@ public class GameService {
     public AnswerResult submitAnswer(String input) {
         if (currentQuiz == null) {
             throw new IllegalStateException("열린 퀴즈가 없습니다");
+        }
+        // 체력 0이라 답 못 하는 상황
+        if (state.isDead()) {
+            throw new IllegalStateException("게임 오버 상태입니다");
         }
         boolean correct = currentQuiz.isCorrect(input);
         String explanation = currentQuiz.getExplanation();
@@ -230,6 +235,10 @@ public class GameService {
     public AnswerResult timeOut() {
         if (currentQuiz == null) {
             throw new IllegalStateException("열린 퀴즈가 없습니다");
+        }
+        // 체력 0이라 답 못 하는 상황
+        if (state.isDead()) {
+            throw new IllegalStateException("게임 오버 상태입니다");
         }
         return applyWrongAnswer(currentQuiz.getExplanation());
     }
