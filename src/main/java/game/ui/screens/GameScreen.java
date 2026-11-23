@@ -4,12 +4,9 @@ import game.common.ScreenType;
 import game.model.AnswerResult;
 import game.model.GameState;
 import game.model.ItemType;
-import game.model.SaveData;
-import game.model.User;
 import game.model.object.GameObject;
 import game.model.quiz.Quiz;
 import game.service.GameService;
-import game.service.UserService;
 import game.ui.BaseScreen;
 import game.ui.Camera;
 import game.ui.ScreenManager;
@@ -18,8 +15,6 @@ import game.ui.components.GameButton;
 import javax.swing.AbstractAction;
 import javax.swing.ActionMap;
 import javax.swing.BorderFactory;
-import javax.swing.Box;
-import javax.swing.BoxLayout;
 import javax.swing.InputMap;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
@@ -31,7 +26,6 @@ import javax.swing.border.EmptyBorder;
 import javax.swing.border.LineBorder;
 import javax.swing.border.MatteBorder;
 import java.awt.BorderLayout;
-import java.awt.CardLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
@@ -43,9 +37,6 @@ import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -59,9 +50,7 @@ public class GameScreen extends BaseScreen {
     private static final int PAUSE_DRAWER_WIDTH = 340;
     private static final Color BG = Color.BLACK;
     private static final Color FG = Color.WHITE;
-    private static final DateTimeFormatter SAVE_TIME_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
-    private final UserService userService;
     private final GameService gameService;
 
     private final Camera camera;
@@ -69,10 +58,6 @@ public class GameScreen extends BaseScreen {
     private final Timer gameLoop;
 
     private final PauseOverlayPanel pauseOverlay;
-    private final CardLayout pauseCardLayout = new CardLayout();
-    private final JPanel pauseCardContainer = new JPanel(pauseCardLayout);
-    private final JPanel saveSlotListPanel = new JPanel();
-    private final JLabel pauseFeedbackLabel = new JLabel(" ");
     private boolean paused = false;
 
     private GameState lastObservedState;
@@ -82,9 +67,8 @@ public class GameScreen extends BaseScreen {
     private String statusText = "";
     private double statusTimer = 0.0;
 
-    public GameScreen(ScreenManager screenManager, UserService userService, GameService gameService) {
+    public GameScreen(ScreenManager screenManager, GameService gameService) {
         super(screenManager, new BorderLayout());
-        this.userService = userService;
         this.gameService = gameService;
 
         this.camera = new Camera(VIEWPORT_COLS, VIEWPORT_ROWS);
@@ -151,7 +135,7 @@ public class GameScreen extends BaseScreen {
 
     private void ensureGameStarted() {
         if (gameService != null && gameService.getState() == null) {
-            gameService.startNewGame(User.createNew("Player", LocalDateTime.now()));
+            gameService.startNewGame();
         }
     }
 
@@ -184,72 +168,37 @@ public class GameScreen extends BaseScreen {
                 new MatteBorder(0, 0, 0, 2, FG),
                 new EmptyBorder(36, 28, 32, 28)));
 
-        JPanel headerPanel = new JPanel(new BorderLayout(0, 8));
+        JPanel headerPanel = new JPanel(new BorderLayout());
         headerPanel.setOpaque(false);
         headerPanel.setBorder(BorderFactory.createCompoundBorder(
                 new MatteBorder(0, 0, 1, 0, FG),
                 new EmptyBorder(0, 0, 12, 0)));
 
-        JLabel titleLabel = new JLabel("PAUSED");
+        JLabel titleLabel = new JLabel("정지");
         titleLabel.setFont(new Font(Font.MONOSPACED, Font.BOLD, 30));
         titleLabel.setForeground(FG);
-        headerPanel.add(titleLabel, BorderLayout.NORTH);
-
-        pauseFeedbackLabel.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 13));
-        pauseFeedbackLabel.setForeground(FG);
-        headerPanel.add(pauseFeedbackLabel, BorderLayout.SOUTH);
+        headerPanel.add(titleLabel, BorderLayout.CENTER);
         leftDrawer.add(headerPanel, BorderLayout.NORTH);
 
-        pauseCardContainer.setOpaque(false);
-        pauseCardContainer.add(createPauseMainButtons(), "MAIN");
-        pauseCardContainer.add(createPauseSavePicker(), "SAVE");
-        leftDrawer.add(pauseCardContainer, BorderLayout.CENTER);
+        JPanel buttonWrapper = new JPanel(new BorderLayout());
+        buttonWrapper.setOpaque(false);
 
-        JLabel hintLabel = new JLabel("[ESC] RESUME");
+        JPanel buttonStack = new JPanel(new GridLayout(3, 1, 0, 14));
+        buttonStack.setOpaque(false);
+        buttonStack.add(stylePauseButton(new GameButton("계속하기", () -> setPaused(false))));
+        buttonStack.add(stylePauseButton(new GameButton("불러오기", this::openLoadFromPause)));
+        buttonStack.add(stylePauseButton(new GameButton("나가기", this::exitToTitle)));
+
+        buttonWrapper.add(buttonStack, BorderLayout.NORTH);
+        leftDrawer.add(buttonWrapper, BorderLayout.CENTER);
+
+        JLabel hintLabel = new JLabel("[ESC] 계속하기");
         hintLabel.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
         hintLabel.setForeground(FG);
         leftDrawer.add(hintLabel, BorderLayout.SOUTH);
 
         overlay.add(leftDrawer, BorderLayout.WEST);
         return overlay;
-    }
-
-    private JPanel createPauseMainButtons() {
-        JPanel wrapper = new JPanel(new BorderLayout());
-        wrapper.setOpaque(false);
-
-        JPanel buttonStack = new JPanel(new GridLayout(4, 1, 0, 14));
-        buttonStack.setOpaque(false);
-
-        buttonStack.add(stylePauseButton(new GameButton("계속하기 (RESUME)", () -> setPaused(false))));
-        buttonStack.add(stylePauseButton(new GameButton("저장하기 (SAVE)", this::openSavePicker)));
-        buttonStack.add(stylePauseButton(new GameButton("불러오기 (LOAD)", this::openLoadFromPause)));
-        buttonStack.add(stylePauseButton(new GameButton("나가기 (EXIT)", this::exitToTitle)));
-
-        wrapper.add(buttonStack, BorderLayout.NORTH);
-        return wrapper;
-    }
-
-    private JPanel createPauseSavePicker() {
-        JPanel picker = new JPanel(new BorderLayout(0, 12));
-        picker.setOpaque(false);
-
-        JLabel subTitle = new JLabel("[SAVE SLOT SELECT]");
-        subTitle.setFont(new Font(Font.MONOSPACED, Font.BOLD, 14));
-        subTitle.setForeground(FG);
-        picker.add(subTitle, BorderLayout.NORTH);
-
-        saveSlotListPanel.setLayout(new BoxLayout(saveSlotListPanel, BoxLayout.Y_AXIS));
-        saveSlotListPanel.setOpaque(false);
-        picker.add(saveSlotListPanel, BorderLayout.CENTER);
-
-        GameButton backBtn = stylePauseButton(new GameButton("뒤로 (BACK)", () -> {
-            pauseFeedbackLabel.setText(" ");
-            pauseCardLayout.show(pauseCardContainer, "MAIN");
-        }));
-        picker.add(backBtn, BorderLayout.SOUTH);
-
-        return picker;
     }
 
     private GameButton stylePauseButton(GameButton btn) {
@@ -282,56 +231,6 @@ public class GameScreen extends BaseScreen {
         return btn;
     }
 
-    private void openSavePicker() {
-        refreshSaveSlotButtons();
-        pauseCardLayout.show(pauseCardContainer, "SAVE");
-    }
-
-    private void refreshSaveSlotButtons() {
-        saveSlotListPanel.removeAll();
-        if (gameService == null) {
-            return;
-        }
-        String nickname = gameService.getCurrentUser().getNickname();
-        List<Optional<SaveData>> slots = gameService.getAllSaveSlots(nickname);
-
-        for (int i = 0; i < slots.size(); i++) {
-            final int slotNo = i + 1;
-            Optional<SaveData> dataOpt = slots.get(i);
-            String label;
-            if (dataOpt.isPresent()) {
-                SaveData d = dataOpt.get();
-                label = String.format("SLOT %d | STG %d (%s)",
-                        slotNo, d.getNextStageNo(), d.getSavedAt().format(SAVE_TIME_FMT));
-            } else {
-                label = String.format("SLOT %d | [EMPTY]", slotNo);
-            }
-
-            if (i > 0) {
-                saveSlotListPanel.add(Box.createRigidArea(new Dimension(0, 10)));
-            }
-            GameButton slotBtn = stylePauseButton(new GameButton(label, () -> performSaveToSlot(slotNo)));
-            slotBtn.setFont(new Font(Font.MONOSPACED, Font.BOLD, 12));
-            saveSlotListPanel.add(slotBtn);
-        }
-        saveSlotListPanel.revalidate();
-        saveSlotListPanel.repaint();
-    }
-
-    private void performSaveToSlot(int slotNo) {
-        if (gameService == null) {
-            return;
-        }
-        try {
-            gameService.saveGame(slotNo);
-            pauseFeedbackLabel.setText(">> SLOT " + slotNo + " SAVED");
-            showStatus("슬롯 " + slotNo + "에 저장되었습니다", 2.0);
-            refreshSaveSlotButtons();
-        } catch (RuntimeException ex) {
-            pauseFeedbackLabel.setText(">> SAVE ERROR: " + ex.getMessage());
-        }
-    }
-
     private void openLoadFromPause() {
         if (screenManager == null) {
             return;
@@ -356,8 +255,6 @@ public class GameScreen extends BaseScreen {
             state.getPlayer().clearInputs();
         }
         if (value) {
-            pauseFeedbackLabel.setText(" ");
-            pauseCardLayout.show(pauseCardContainer, "MAIN");
             pauseOverlay.setVisible(true);
             SwingUtilities.invokeLater(pauseOverlay::requestFocusInWindow);
         } else {
@@ -386,6 +283,9 @@ public class GameScreen extends BaseScreen {
         if (state.isStageCleared() && !stageClearTransitionScheduled) {
             stageClearTransitionScheduled = true;
             int clearedStageNo = state.getStage().getNumber();
+            int savedSlot = gameService.autoSaveOnStageClear();
+            showStatus("STAGE CLEAR - 자동 저장 완료 (슬롯 " + savedSlot + ")", 1.5);
+
             Timer clearDelay = new Timer(1200, e -> advanceAfterStageClear(clearedStageNo));
             clearDelay.setRepeats(false);
             clearDelay.start();

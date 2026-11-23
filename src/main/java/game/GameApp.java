@@ -68,9 +68,9 @@ public class GameApp {
 
             // 스크린매니저에 각 화면 등록
             screenManager.register(ScreenType.START, new StartScreen(screenManager));
-            screenManager.register(ScreenType.GAME, new GameScreen(screenManager, userService, gameService));
+            screenManager.register(ScreenType.GAME, new GameScreen(screenManager, gameService));
             screenManager.register(ScreenType.QUIZ, new QuizScreen(screenManager));
-            screenManager.register(ScreenType.LOAD, new LoadScreen(screenManager, userService, gameService));
+            screenManager.register(ScreenType.LOAD, new LoadScreen(screenManager, gameService));
             screenManager.register(ScreenType.CUTSCENE,
                     new CutsceneScreen(screenManager, cutsceneRepository, imageLoader));
             screenManager.register(ScreenType.PLACEHOLDER, new BaseScreen(screenManager, new GridBagLayout()) {

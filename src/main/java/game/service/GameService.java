@@ -7,7 +7,6 @@ import game.model.ItemType;
 import game.model.Player;
 import game.model.SaveData;
 import game.model.Stage;
-import game.model.User;
 import game.model.object.GameObject;
 import game.model.quiz.Quiz;
 import game.repository.QuizRepository;
@@ -21,7 +20,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-/** UI와 데이터 사이 연결 및 게임 규칙 처리 */
 public class GameService {
     private static final int FIRST_STAGE = 1;
     private static final int MAX_HP = 3;
@@ -32,7 +30,6 @@ public class GameService {
     private final StageRepository stageRepository;
     private final SaveRepository saveRepository;
     private GameState state;
-    private User currentUser;
     private int currentSlot;
     private Quiz currentQuiz;
     private GameObject currentTarget;
@@ -43,36 +40,30 @@ public class GameService {
         this.saveRepository = saveRepository;
     }
 
-    public void startNewGame(User user) {
+    public void startNewGame() {
         Stage firstStage = stageRepository.findByNumber(FIRST_STAGE)
                 .orElseThrow(() -> new IllegalStateException("1스테이지 파일이 없습니다"));
-        this.currentUser = (user != null) ? user : User.createNew(DEFAULT_NICKNAME, LocalDateTime.now());
         this.state = new GameState(firstStage, MAX_HP, null);
         this.currentSlot = 0;
         cancelQuiz();
     }
 
-    public void continueGame(User user, int slot) {
-        User resolvedUser = (user != null) ? user : getCurrentUser();
-        SaveData save = saveRepository.find(resolvedUser.getNickname(), slot)
+    public void continueGame(int slot) {
+        SaveData save = saveRepository.find(DEFAULT_NICKNAME, slot)
                 .orElseThrow(() -> new IllegalStateException(slot + "번 저장 칸이 비어 있습니다"));
         Stage stage = stageRepository.findByNumber(save.getNextStageNo())
-                .orElseThrow(() -> new IllegalStateException("다음 스테이지 파일이 없습니다"));
+                .or(() -> stageRepository.findByNumber(save.getClearedStage()))
+                .orElseThrow(() -> new IllegalStateException("스테이지 파일이 없습니다"));
         this.state = new GameState(stage, MAX_HP, save);
-        this.currentUser = resolvedUser;
         this.currentSlot = slot;
         cancelQuiz();
     }
 
-    public SaveData saveGame(int slot) {
+    public int autoSaveOnStageClear() {
         if (state == null) {
             throw new IllegalStateException("진행 중인 게임이 없습니다");
         }
-        User user = getCurrentUser();
-        int currentStageNo = state.getStage().getNumber();
-        int clearedStage = state.isStageCleared()
-                ? currentStageNo
-                : Math.max(0, currentStageNo - 1);
+        int targetSlot = resolveAutoSaveSlot();
 
         Map<ItemType, Integer> inventory = new EnumMap<>(ItemType.class);
         for (ItemType type : ItemType.values()) {
@@ -83,30 +74,50 @@ public class GameService {
         }
 
         SaveData data = new SaveData(
-                clearedStage,
+                state.getStage().getNumber(),
                 state.getHp(),
                 state.getScore(),
                 inventory,
                 LocalDateTime.now());
-        saveRepository.save(user.getNickname(), slot, data);
-        this.currentSlot = slot;
-        return data;
+        saveRepository.save(DEFAULT_NICKNAME, targetSlot, data);
+        this.currentSlot = targetSlot;
+        return targetSlot;
     }
 
-    public List<Optional<SaveData>> getAllSaveSlots(String nickname) {
-        String target = (nickname == null || nickname.isBlank()) ? getCurrentUser().getNickname() : nickname;
+    public void deleteSave(int slot) {
+        saveRepository.delete(DEFAULT_NICKNAME, slot);
+        if (currentSlot == slot) {
+            currentSlot = 0;
+        }
+    }
+
+    private int resolveAutoSaveSlot() {
+        if (currentSlot >= 1 && currentSlot <= GameConstants.SAVE_SLOT_COUNT) {
+            return currentSlot;
+        }
+        int oldestSlot = 1;
+        LocalDateTime oldestTime = null;
+
+        for (int slot = 1; slot <= GameConstants.SAVE_SLOT_COUNT; slot++) {
+            Optional<SaveData> existing = saveRepository.find(DEFAULT_NICKNAME, slot);
+            if (existing.isEmpty()) {
+                return slot;
+            }
+            LocalDateTime savedAt = existing.get().getSavedAt();
+            if (oldestTime == null || savedAt.isBefore(oldestTime)) {
+                oldestTime = savedAt;
+                oldestSlot = slot;
+            }
+        }
+        return oldestSlot;
+    }
+
+    public List<Optional<SaveData>> getAllSaveSlots() {
         List<Optional<SaveData>> slots = new ArrayList<>(GameConstants.SAVE_SLOT_COUNT);
         for (int slot = 1; slot <= GameConstants.SAVE_SLOT_COUNT; slot++) {
-            slots.add(saveRepository.find(target, slot));
+            slots.add(saveRepository.find(DEFAULT_NICKNAME, slot));
         }
         return slots;
-    }
-
-    public User getCurrentUser() {
-        if (currentUser == null) {
-            currentUser = User.createNew(DEFAULT_NICKNAME, LocalDateTime.now());
-        }
-        return currentUser;
     }
 
     public int getCurrentSlot() {
@@ -122,7 +133,10 @@ public class GameService {
         if (nextStage.isEmpty()) {
             return false;
         }
-        this.state = new GameState(nextStage.get(), MAX_HP, null);
+        SaveData carryOver = (currentSlot != 0)
+                ? saveRepository.find(DEFAULT_NICKNAME, currentSlot).orElse(null)
+                : null;
+        this.state = new GameState(nextStage.get(), MAX_HP, carryOver);
         cancelQuiz();
         return true;
     }
@@ -135,7 +149,7 @@ public class GameService {
         if (!canRestartFromSave()) {
             return false;
         }
-        continueGame(currentUser, currentSlot);
+        continueGame(currentSlot);
         return true;
     }
 
@@ -181,7 +195,6 @@ public class GameService {
         return type.use(state);
     }
 
-    /** 몬스터·미믹·함정 등 퀴즈를 가진 오브젝트와 연결된 문제를 연다. */
     public Optional<Quiz> openQuiz(GameObject source) {
         if (state == null || source == null || state.isObjectResolved(source.getId())) {
             return Optional.empty();
@@ -234,7 +247,6 @@ public class GameService {
         return applyWrongAnswer(currentQuiz.getExplanation());
     }
 
-    /** 퀴즈 취소: 중단한 오브젝트는 플레이어가 한 번 벗어날 때까지 재발동을 억제한다. */
     public void cancelQuiz() {
         if (state != null && currentTarget != null) {
             state.getPlayer().suppressObjectUntilLeave(currentTarget.getId());

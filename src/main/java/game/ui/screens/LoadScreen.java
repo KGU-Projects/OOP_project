@@ -2,9 +2,7 @@ package game.ui.screens;
 
 import game.common.ScreenType;
 import game.model.SaveData;
-import game.model.User;
 import game.service.GameService;
-import game.service.UserService;
 import game.ui.BaseScreen;
 import game.ui.ScreenManager;
 import game.ui.components.GameButton;
@@ -38,13 +36,13 @@ public class LoadScreen extends BaseScreen {
     private static final int LIST_PADDING = 16;
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
-    private final UserService userService;
     private final GameService gameService;
 
     private final JPanel centerWrapper;
     private final JPanel slotListPanel;
     private final JScrollPane scrollPane;
     private final JLabel statusLabel = new JLabel(" ");
+    private final GameButton deleteActionButton;
     private final GameButton loadActionButton;
 
     private SaveButton selectedButton;
@@ -52,17 +50,13 @@ public class LoadScreen extends BaseScreen {
     private boolean selectedSlotHasData = false;
     private ScreenType returnScreen = ScreenType.START;
 
-    public LoadScreen(ScreenManager screenManager, UserService userService) {
-        this(screenManager, userService, null);
-    }
-
-    public LoadScreen(ScreenManager screenManager, UserService userService, GameService gameService) {
+    public LoadScreen(ScreenManager screenManager, GameService gameService) {
         super(screenManager, new BorderLayout(0, 25));
-        this.userService = userService;
         this.gameService = gameService;
         this.centerWrapper = new JPanel(new GridBagLayout());
         this.slotListPanel = new JPanel();
         this.scrollPane = new JScrollPane(slotListPanel);
+        this.deleteActionButton = new GameButton("삭제하기", this::handleDeleteSelected);
         this.loadActionButton = new GameButton("불러오기", this::handleLoadSelected);
         initUI();
     }
@@ -72,22 +66,18 @@ public class LoadScreen extends BaseScreen {
     }
 
     private void initUI() {
-        // 제목
         panel.add(createTitleLabel("불러오기"), BorderLayout.NORTH);
 
-        // 세이브 레이아웃
         slotListPanel.setLayout(new BoxLayout(slotListPanel, BoxLayout.Y_AXIS));
         slotListPanel.setOpaque(false);
         slotListPanel.setBorder(new EmptyBorder(LIST_PADDING, LIST_PADDING, LIST_PADDING, LIST_PADDING));
 
-        // 스크롤바
         scrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
         scrollPane.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
         scrollPane.setOpaque(false);
         scrollPane.getViewport().setOpaque(false);
         scrollPane.getVerticalScrollBar().setUnitIncrement(16);
 
-        // 중앙 래퍼
         centerWrapper.setOpaque(false);
 
         GridBagConstraints gbc = new GridBagConstraints();
@@ -98,17 +88,18 @@ public class LoadScreen extends BaseScreen {
 
         panel.add(centerWrapper, BorderLayout.CENTER);
 
-        // 하단 상태 문구 + 선택 버튼 패널
         JPanel southContainer = new JPanel(new BorderLayout());
         southContainer.setOpaque(false);
 
         statusLabel.setFont(new Font("SansSerif", Font.PLAIN, 14));
-        statusLabel.setForeground(new Color(220, 180, 180));
+        statusLabel.setForeground(Color.WHITE);
         southContainer.add(statusLabel, BorderLayout.WEST);
 
         JPanel bottomPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 15, 0));
         bottomPanel.setOpaque(false);
         bottomPanel.add(new GameButton("뒤로가기", this::handleBack));
+        deleteActionButton.setEnabled(false);
+        bottomPanel.add(deleteActionButton);
         loadActionButton.setEnabled(false);
         bottomPanel.add(loadActionButton);
 
@@ -124,8 +115,7 @@ public class LoadScreen extends BaseScreen {
             updateSaveSlots(List.of());
             return;
         }
-        User user = gameService.getCurrentUser();
-        updateSaveSlots(gameService.getAllSaveSlots(user.getNickname()));
+        updateSaveSlots(gameService.getAllSaveSlots());
     }
 
     public void updateSaveSlots(List<Optional<SaveData>> slots) {
@@ -154,7 +144,10 @@ public class LoadScreen extends BaseScreen {
 
                 if (hasData) {
                     SaveData data = dataOpt.get();
-                    title = "STAGE " + data.getNextStageNo();
+                    int nextStage = data.getNextStageNo();
+                    title = gameService.hasStage(nextStage)
+                            ? "STAGE " + nextStage
+                            : "STAGE " + data.getClearedStage() + " (CLEAR)";
                     detail = String.format("HP %d  |  SCORE %d  |  저장: %s",
                             data.getHp(),
                             data.getScore(),
@@ -209,8 +202,25 @@ public class LoadScreen extends BaseScreen {
         if (selectedButton != null) {
             selectedButton.setSelected(true);
         }
-        loadActionButton.setEnabled(selectedSlot >= 1 && selectedSlotHasData);
+        boolean validSelection = selectedSlot >= 1 && selectedSlotHasData;
+        deleteActionButton.setEnabled(validSelection);
+        loadActionButton.setEnabled(validSelection);
         statusLabel.setText(" ");
+    }
+
+    private void handleDeleteSelected() {
+        if (gameService == null || selectedSlot < 1 || !selectedSlotHasData) {
+            statusLabel.setText("삭제할 세이브 슬롯을 선택해주세요.");
+            return;
+        }
+        int deletedSlot = selectedSlot;
+        try {
+            gameService.deleteSave(deletedSlot);
+            reloadSlotsFromService();
+            statusLabel.setText("슬롯 " + deletedSlot + "의 세이브를 삭제했습니다.");
+        } catch (RuntimeException ex) {
+            statusLabel.setText("삭제 실패: " + ex.getMessage());
+        }
     }
 
     private void handleLoadSelected() {
@@ -219,8 +229,7 @@ public class LoadScreen extends BaseScreen {
             return;
         }
         try {
-            User user = gameService.getCurrentUser();
-            gameService.continueGame(user, selectedSlot);
+            gameService.continueGame(selectedSlot);
             returnScreen = ScreenType.START;
             screenManager.show(ScreenType.GAME);
         } catch (RuntimeException ex) {
