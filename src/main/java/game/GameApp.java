@@ -7,6 +7,12 @@ import game.repository.file.FileCutsceneRepository;
 import game.repository.file.FileQuizRepository;
 import game.repository.file.FileSaveRepository;
 import game.repository.file.FileStageRepository;
+import game.repository.file.FileUserRepository;
+
+import java.nio.file.Path;
+
+import java.awt.CardLayout;
+//import java.awt.Dimension;
 import game.service.GameService;
 import game.service.UserService;
 import game.ui.BaseScreen;
@@ -49,7 +55,9 @@ public class GameApp {
             JPanel mainContainer = new JPanel(cardLayout);
 
             ScreenManager screenManager = new ScreenManager(mainContainer, cardLayout);
-            UserService userService = new UserService();
+            // 기존: UserService userService = new UserService(); => 유저서비스 파일 완성해서 수정함.
+            // users.txt를 읽고 쓰는 사용자 창고(FileUserRepository)를 만들어 UserService에 넘김.
+            UserService userService = new UserService(new FileUserRepository(Path.of("data/users.txt")));
             GameService gameService = new GameService(
                     new FileQuizRepository(Path.of(GameConstants.QUIZ_FILE)),
                     new FileStageRepository(Path.of(GameConstants.STAGE_DIRECTORY)),
