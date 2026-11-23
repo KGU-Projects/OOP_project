@@ -7,7 +7,6 @@ import game.ui.Camera;
 
 import java.awt.AlphaComposite;
 import java.awt.Color;
-import java.awt.Composite;
 import java.awt.Font;
 import java.awt.FontMetrics;
 import java.awt.Graphics2D;
@@ -21,7 +20,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * ObjectType별 렌더러 전략 (캐싱된 텍스처 적용 및 흑백 폴백 지원).
+ * ObjectType별 렌더러 전략 (불투명 캐싱 텍스처 적용 및 흑백 폴백 지원).
  */
 final class ObjectRendererRegistry {
 
@@ -85,11 +84,12 @@ final class ObjectRendererRegistry {
         }
     }
 
-    private static BufferedImage getScaled(BufferedImage src, Map<Long, BufferedImage> cache, int w, int h) {
+    private static BufferedImage getScaledOpaque(BufferedImage src, Map<Long, BufferedImage> cache,
+            int w, int h, int alphaPercent) {
         if (src == null || w <= 0 || h <= 0) {
             return null;
         }
-        long key = (((long) w) << 32) | (h & 0xFFFFFFFFL);
+        long key = (((long) w & 0xFFFFL) << 32) | (((long) h & 0xFFFFL) << 16) | (alphaPercent & 0xFFFFL);
         BufferedImage cached = cache.get(key);
         if (cached != null) {
             return cached;
@@ -97,16 +97,21 @@ final class ObjectRendererRegistry {
 
         BufferedImage scaled;
         if (GraphicsEnvironment.isHeadless()) {
-            scaled = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
+            scaled = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
         } else {
             GraphicsConfiguration gc = GraphicsEnvironment.getLocalGraphicsEnvironment()
                     .getDefaultScreenDevice()
                     .getDefaultConfiguration();
-            scaled = gc.createCompatibleImage(w, h, Transparency.TRANSLUCENT);
+            scaled = gc.createCompatibleImage(w, h, Transparency.OPAQUE);
         }
 
         Graphics2D g = scaled.createGraphics();
+        g.setColor(Color.BLACK);
+        g.fillRect(0, 0, w, h);
         g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+        if (alphaPercent < 100) {
+            g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, alphaPercent / 100f));
+        }
         g.drawImage(src, 0, 0, w, h, null);
         g.dispose();
 
@@ -115,19 +120,11 @@ final class ObjectRendererRegistry {
     }
 
     private static void drawTexture(Graphics2D g2, BufferedImage src, Map<Long, BufferedImage> cache,
-            int x, int y, int w, int h, float alpha) {
-        BufferedImage scaled = getScaled(src, cache, w, h);
-        if (scaled == null) {
-            return;
-        }
-        if (alpha >= 0.99f) {
+            int x, int y, int w, int h, int alphaPercent) {
+        BufferedImage scaled = getScaledOpaque(src, cache, w, h, alphaPercent);
+        if (scaled != null) {
             g2.drawImage(scaled, x, y, null);
-            return;
         }
-        Composite old = g2.getComposite();
-        g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, alpha));
-        g2.drawImage(scaled, x, y, null);
-        g2.setComposite(old);
     }
 
     private static void drawTexturedTag(Graphics2D g2, String text, int cx, int cy) {
@@ -153,7 +150,7 @@ final class ObjectRendererRegistry {
         int ph = camera.toPixels(obj.getHeight());
 
         if (texture != null) {
-            drawTexture(g2, texture, cache, px + 2, py + 2, pw - 4, ph - 4, 1.0f);
+            drawTexture(g2, texture, cache, px + 2, py + 2, pw - 4, ph - 4, 100);
             drawTexturedTag(g2, "M", px + pw / 2, py + ph / 2);
             return;
         }
@@ -173,10 +170,10 @@ final class ObjectRendererRegistry {
 
         if (texture != null) {
             if (state.isObjectResolved(obj.getId())) {
-                drawTexture(g2, texture, cache, px + 4, py + 4, pw - 8, ph - 8, 0.35f);
+                drawTexture(g2, texture, cache, px + 4, py + 4, pw - 8, ph - 8, 35);
                 drawTexturedTag(g2, "OPEN", px + pw / 2, py + ph / 2);
             } else {
-                drawTexture(g2, texture, cache, px + 4, py + 4, pw - 8, ph - 8, 1.0f);
+                drawTexture(g2, texture, cache, px + 4, py + 4, pw - 8, ph - 8, 100);
                 drawTexturedTag(g2, "S", px + pw / 2, py + ph / 2);
             }
             if (nearby) {
@@ -206,7 +203,7 @@ final class ObjectRendererRegistry {
         int ph = camera.toPixels(obj.getHeight());
 
         if (texture != null) {
-            drawTexture(g2, texture, cache, px + 4, py + 4, pw - 8, ph - 8, 1.0f);
+            drawTexture(g2, texture, cache, px + 4, py + 4, pw - 8, ph - 8, 100);
             drawTexturedTag(g2, "!", px + pw / 2, py + ph / 2);
             return;
         }
@@ -224,7 +221,7 @@ final class ObjectRendererRegistry {
         int ph = camera.toPixels(obj.getHeight());
 
         if (texture != null) {
-            drawTexture(g2, texture, cache, px + 2, py + 2, pw - 4, ph - 4, 1.0f);
+            drawTexture(g2, texture, cache, px + 2, py + 2, pw - 4, ph - 4, 100);
             drawTexturedTag(g2, "D", px + pw / 2, py + ph / 2);
             return;
         }
@@ -244,7 +241,7 @@ final class ObjectRendererRegistry {
         int ph = camera.toPixels(obj.getHeight());
 
         if (texture != null) {
-            drawTexture(g2, texture, cache, px, py, pw, ph, 1.0f);
+            drawTexture(g2, texture, cache, px, py, pw, ph, 100);
             drawTexturedTag(g2, "A", px + pw / 2, py + ph / 2);
             return;
         }
@@ -265,10 +262,10 @@ final class ObjectRendererRegistry {
 
         if (texture != null) {
             if (!obj.canInteract(state)) {
-                drawTexture(g2, texture, cache, px + 4, py + 4, pw - 8, ph - 8, 0.35f);
+                drawTexture(g2, texture, cache, px + 4, py + 4, pw - 8, ph - 8, 35);
                 drawTexturedTag(g2, "OK", px + pw / 2, py + ph / 2);
             } else {
-                drawTexture(g2, texture, cache, px + 4, py + 4, pw - 8, ph - 8, 1.0f);
+                drawTexture(g2, texture, cache, px + 4, py + 4, pw - 8, ph - 8, 100);
                 drawTexturedTag(g2, "B", px + pw / 2, py + ph / 2);
             }
             if (nearby) {
@@ -299,9 +296,9 @@ final class ObjectRendererRegistry {
 
         if (texture != null) {
             if (!obj.isSolid(state)) {
-                drawTexture(g2, texture, cache, px + 2, py + 2, pw - 4, ph - 4, 0.25f);
+                drawTexture(g2, texture, cache, px + 2, py + 2, pw - 4, ph - 4, 25);
             } else {
-                drawTexture(g2, texture, cache, px + 2, py + 2, pw - 4, ph - 4, 1.0f);
+                drawTexture(g2, texture, cache, px + 2, py + 2, pw - 4, ph - 4, 100);
                 g2.setColor(Color.BLACK);
                 g2.drawLine(px + 2, py + 2, px + pw - 3, py + ph - 3);
                 g2.drawLine(px + pw - 3, py + 2, px + 2, py + ph - 3);
@@ -328,7 +325,7 @@ final class ObjectRendererRegistry {
         int ph = camera.toPixels(obj.getHeight());
 
         if (texture != null) {
-            drawTexture(g2, texture, cache, px + 6, py + 6, pw - 12, ph - 12, 1.0f);
+            drawTexture(g2, texture, cache, px + 6, py + 6, pw - 12, ph - 12, 100);
             drawTexturedTag(g2, "K", px + pw / 2, py + ph / 2);
             return;
         }
@@ -346,7 +343,7 @@ final class ObjectRendererRegistry {
         int ph = camera.toPixels(obj.getHeight());
 
         if (texture != null) {
-            drawTexture(g2, texture, cache, px + 6, py + 6, pw - 12, ph - 12, 1.0f);
+            drawTexture(g2, texture, cache, px + 6, py + 6, pw - 12, ph - 12, 100);
             drawTexturedTag(g2, "I", px + pw / 2, py + ph / 2);
             return;
         }
@@ -364,7 +361,7 @@ final class ObjectRendererRegistry {
         int ph = camera.toPixels(obj.getHeight());
 
         if (texture != null) {
-            drawTexture(g2, texture, cache, px + 2, py + 2, pw - 4, ph - 4, 1.0f);
+            drawTexture(g2, texture, cache, px + 2, py + 2, pw - 4, ph - 4, 100);
             drawTexturedTag(g2, "BOSS", px + pw / 2, py + ph / 2);
             if (nearby) {
                 drawPrompt(g2, obj.getInteractPrompt(), px + pw / 2, py - 6);

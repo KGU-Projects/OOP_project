@@ -55,6 +55,7 @@ public class GameScreen extends BaseScreen {
 
     private final GameService gameService;
     private final BufferedImage placeholderTexture;
+    private final PlayerAnimator playerAnimator;
 
     private final Camera camera;
     private final MapCanvas canvas;
@@ -79,6 +80,7 @@ public class GameScreen extends BaseScreen {
         this.gameService = gameService;
         ImageLoader loader = (imageLoader != null) ? imageLoader : new ImageLoader();
         this.placeholderTexture = loader.get(PLACEHOLDER_TEXTURE).orElse(null);
+        this.playerAnimator = new PlayerAnimator(loader, placeholderTexture);
 
         this.camera = new Camera(VIEWPORT_COLS, VIEWPORT_ROWS);
         this.canvas = new MapCanvas(
@@ -87,7 +89,8 @@ public class GameScreen extends BaseScreen {
                 this::currentState,
                 this::findNearbyInteractable,
                 this::currentStatusText,
-                placeholderTexture);
+                placeholderTexture,
+                playerAnimator);
 
         this.pauseOverlay = createPauseOverlay();
 
@@ -108,6 +111,7 @@ public class GameScreen extends BaseScreen {
                 lastObservedState = state;
                 stageClearTransitionScheduled = false;
                 setPaused(false);
+                playerAnimator.reset();
                 camera.snapTo(state.getPlayer(), state.getStage());
 
                 Optional<String> cutscene = state.getStage().getCutsceneFile();
@@ -266,6 +270,7 @@ public class GameScreen extends BaseScreen {
         }
 
         GameObject.InteractionOutcome outcome = gameService.updatePlayer(FIXED_DT);
+        playerAnimator.update(state, FIXED_DT);
         handleOutcome(outcome);
 
         if (state.isStageCleared() && !stageClearTransitionScheduled) {
