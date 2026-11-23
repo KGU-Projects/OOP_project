@@ -14,30 +14,52 @@ import java.awt.Font;
 import java.awt.FontMetrics;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.GraphicsConfiguration;
+import java.awt.GraphicsEnvironment;
+import java.awt.RenderingHints;
+import java.awt.Transparency;
+import java.awt.image.BufferedImage;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.Supplier;
 
 /**
- * 40 x 20 타일 뷰포트를 순수 흑백(BLACK / WHITE)으로 렌더링하는 캔버스.
+ * 40 x 20 타일 뷰포트를 렌더링하는 캔버스.
  */
 final class MapCanvas extends JPanel {
+
+    private static final Font HUD_FONT = new Font(Font.MONOSPACED, Font.BOLD, 13);
+    private static final Font NOTICE_FONT = new Font(Font.MONOSPACED, Font.BOLD, 20);
 
     private final Camera camera;
     private final ObjectRendererRegistry rendererRegistry;
     private final Supplier<GameState> stateSupplier;
     private final Supplier<Optional<GameObject>> nearbySupplier;
     private final Supplier<String> statusSupplier;
+    private final BufferedImage placeholderTexture;
+    private final Map<Long, BufferedImage> scaledCache = new HashMap<>();
 
     MapCanvas(Camera camera,
             ObjectRendererRegistry rendererRegistry,
             Supplier<GameState> stateSupplier,
             Supplier<Optional<GameObject>> nearbySupplier,
             Supplier<String> statusSupplier) {
+        this(camera, rendererRegistry, stateSupplier, nearbySupplier, statusSupplier, null);
+    }
+
+    MapCanvas(Camera camera,
+            ObjectRendererRegistry rendererRegistry,
+            Supplier<GameState> stateSupplier,
+            Supplier<Optional<GameObject>> nearbySupplier,
+            Supplier<String> statusSupplier,
+            BufferedImage placeholderTexture) {
         this.camera = camera;
         this.rendererRegistry = rendererRegistry;
         this.stateSupplier = stateSupplier;
         this.nearbySupplier = nearbySupplier;
         this.statusSupplier = statusSupplier;
+        this.placeholderTexture = placeholderTexture;
 
         setFocusable(true);
         setBackground(Color.BLACK);
@@ -78,16 +100,21 @@ final class MapCanvas extends JPanel {
         int endCol = camera.getLastVisibleCol(stage.getWidth());
         int startRow = camera.getFirstVisibleRow();
         int endRow = camera.getLastVisibleRow(stage.getHeight());
+        BufferedImage tileSprite = getScaledTexture(ts, ts, false);
 
         for (int y = startRow; y <= endRow; y++) {
             for (int x = startCol; x <= endCol; x++) {
                 if (stage.isSolidTile(x, y)) {
                     int px = camera.worldToScreenX(x);
                     int py = camera.worldToScreenY(y);
-                    g2.setColor(Color.WHITE);
-                    g2.fillRect(px, py, ts, ts);
-                    g2.setColor(Color.BLACK);
-                    g2.drawRect(px, py, ts - 1, ts - 1);
+                    if (tileSprite != null) {
+                        g2.drawImage(tileSprite, px, py, null);
+                    } else {
+                        g2.setColor(Color.WHITE);
+                        g2.fillRect(px, py, ts, ts);
+                        g2.setColor(Color.BLACK);
+                        g2.drawRect(px, py, ts - 1, ts - 1);
+                    }
                 }
             }
         }
@@ -106,6 +133,12 @@ final class MapCanvas extends JPanel {
         int pw = camera.toPixels(GameConstants.PLAYER_WIDTH);
         int ph = camera.toPixels(GameConstants.PLAYER_HEIGHT);
 
+        BufferedImage playerSprite = getScaledTexture(pw, ph, !player.isFacingRight());
+        if (playerSprite != null) {
+            g2.drawImage(playerSprite, px, py, null);
+            return;
+        }
+
         g2.setColor(Color.WHITE);
         g2.fillRect(px, py, pw, ph);
         g2.setColor(Color.BLACK);
@@ -115,6 +148,39 @@ final class MapCanvas extends JPanel {
         int eyeX = player.isFacingRight() ? px + pw - eyeSize - 3 : px + 3;
         int eyeY = py + Math.max(3, ph / 6);
         g2.fillRect(eyeX, eyeY, eyeSize, eyeSize);
+    }
+
+    private BufferedImage getScaledTexture(int w, int h, boolean flipX) {
+        if (placeholderTexture == null || w <= 0 || h <= 0) {
+            return null;
+        }
+        long key = (((long) w & 0x7FFFFFFFL) << 33) | (((long) h & 0xFFFFFFFFL) << 1) | (flipX ? 1L : 0L);
+        BufferedImage cached = scaledCache.get(key);
+        if (cached != null) {
+            return cached;
+        }
+
+        BufferedImage scaled;
+        if (GraphicsEnvironment.isHeadless()) {
+            scaled = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
+        } else {
+            GraphicsConfiguration gc = GraphicsEnvironment.getLocalGraphicsEnvironment()
+                    .getDefaultScreenDevice()
+                    .getDefaultConfiguration();
+            scaled = gc.createCompatibleImage(w, h, Transparency.TRANSLUCENT);
+        }
+
+        Graphics2D g = scaled.createGraphics();
+        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+        if (flipX) {
+            g.drawImage(placeholderTexture, w, 0, -w, h, null);
+        } else {
+            g.drawImage(placeholderTexture, 0, 0, w, h, null);
+        }
+        g.dispose();
+
+        scaledCache.put(key, scaled);
+        return scaled;
     }
 
     private void drawHud(Graphics2D g2, GameState state, int vx, int vy, int vw, int vh) {
@@ -127,7 +193,7 @@ final class MapCanvas extends JPanel {
                 state.getScore(),
                 state.getItemCount(ItemType.HEALTH_POTION));
 
-        g2.setFont(new Font(Font.MONOSPACED, Font.BOLD, 13));
+        g2.setFont(HUD_FONT);
         FontMetrics fm = g2.getFontMetrics();
         int boxW = fm.stringWidth(hud) + 16;
         int boxH = 24;
@@ -151,7 +217,7 @@ final class MapCanvas extends JPanel {
     }
 
     private void drawCenterNotice(Graphics2D g2, int vx, int vy, int vw, int vh, String text) {
-        g2.setFont(new Font(Font.MONOSPACED, Font.BOLD, 20));
+        g2.setFont(NOTICE_FONT);
         FontMetrics fm = g2.getFontMetrics();
         int w = fm.stringWidth(text) + 40;
         int h = 50;

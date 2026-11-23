@@ -83,10 +83,11 @@ public class GameScreen extends BaseScreen {
         this.camera = new Camera(VIEWPORT_COLS, VIEWPORT_ROWS);
         this.canvas = new MapCanvas(
                 camera,
-                ObjectRendererRegistry.createMonochromeDefault(),
+                ObjectRendererRegistry.createTexturedDefault(placeholderTexture),
                 this::currentState,
                 this::findNearbyInteractable,
-                this::currentStatusText);
+                this::currentStatusText,
+                placeholderTexture);
 
         this.pauseOverlay = createPauseOverlay();
 
@@ -194,6 +195,11 @@ public class GameScreen extends BaseScreen {
 
         buttonWrapper.add(buttonStack, BorderLayout.NORTH);
         leftDrawer.add(buttonWrapper, BorderLayout.CENTER);
+
+        JLabel hintLabel = new JLabel("[ESC] 계속하기");
+        hintLabel.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        hintLabel.setForeground(FG);
+        leftDrawer.add(hintLabel, BorderLayout.SOUTH);
 
         overlay.add(leftDrawer, BorderLayout.WEST);
         return overlay;
