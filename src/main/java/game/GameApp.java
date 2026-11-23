@@ -1,14 +1,9 @@
 package game;
 
-import game.ui.ScreenManager;
-import game.ui.screens.SlopPlaceHolderScreen;
-import game.ui.screens.GameScreen;
-import game.ui.screens.LoadScreen;
-import game.ui.screens.StartScreen;
-import game.service.UserService;
-import game.service.GameService;
 import game.common.GameConstants;
 import game.common.ScreenType;
+import game.repository.CutsceneRepository;
+import game.repository.file.FileCutsceneRepository;
 import game.repository.file.FileQuizRepository;
 import game.repository.file.FileSaveRepository;
 import game.repository.file.FileStageRepository;
@@ -18,23 +13,31 @@ import java.nio.file.Path;
 
 import java.awt.CardLayout;
 //import java.awt.Dimension;
+import game.service.GameService;
+import game.service.UserService;
+import game.ui.BaseScreen;
+import game.ui.ScreenManager;
+import game.ui.screens.CutsceneScreen;
+import game.ui.screens.GameScreen;
+import game.ui.screens.LoadScreen;
+import game.ui.screens.QuizScreen;
+import game.ui.screens.StartScreen;
+import game.ui.ImageLoader;
 
 import javax.swing.JFrame;
 import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
+import java.awt.CardLayout;
+import java.awt.GridBagLayout;
+import java.nio.file.Path;
 
-//게임의 시작점
-//jframe으로 게임 윈도우 생성
-//UserService, ScreenManager 시동
-
+// 게임의 시작점
+// JFrame으로 게임 윈도우 생성
+// UserService, GameService, ScreenManager 시동
 public class GameApp {
 
-    // 종횡비고정 16:9
-    // private static final double ASPECT_RATIO = 16.0 / 9.0;
     private static final int DEFAULT_WIDTH = 1280;
     private static final int DEFAULT_HEIGHT = 720;
-    // private static final int MIN_WIDTH = 800;
-    // private static final int MIN_HEIGHT = 450;
 
     public static void main(String[] args) {
         initGame();
@@ -42,13 +45,10 @@ public class GameApp {
 
     private static void initGame() {
         SwingUtilities.invokeLater(() -> {
-
-            // 창 생성
-            JFrame frame = new JFrame("OOP_project");
+            JFrame frame = new JFrame("CODE ESCAPE");
             frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
             frame.setSize(DEFAULT_WIDTH, DEFAULT_HEIGHT);
             frame.setResizable(false);
-            // frame.setMinimumSize(new Dimension(MIN_WIDTH, MIN_HEIGHT));
             frame.setLocationRelativeTo(null);
 
             CardLayout cardLayout = new CardLayout();
@@ -62,20 +62,29 @@ public class GameApp {
                     new FileQuizRepository(Path.of(GameConstants.QUIZ_FILE)),
                     new FileStageRepository(Path.of(GameConstants.STAGE_DIRECTORY)),
                     new FileSaveRepository(Path.of(GameConstants.SAVE_DIRECTORY)));
-            // PhysicsEngine physicsEngine = new PhysicsEngine();
+            CutsceneRepository cutsceneRepository = new FileCutsceneRepository(
+                    Path.of(GameConstants.CUTSCENE_DIRECTORY));
+            ImageLoader imageLoader = new ImageLoader();
 
             // 스크린매니저에 각 화면 등록
             screenManager.register(ScreenType.START, new StartScreen(screenManager));
-            screenManager.register(ScreenType.LOAD, new LoadScreen(screenManager, userService));
             screenManager.register(ScreenType.GAME, new GameScreen(screenManager, userService, gameService));
-            screenManager.register(ScreenType.PLACEHOLDER,
-                    new SlopPlaceHolderScreen(screenManager, () -> screenManager.show(ScreenType.GAME)));
+            screenManager.register(ScreenType.QUIZ, new QuizScreen(screenManager));
+            screenManager.register(ScreenType.LOAD, new LoadScreen(screenManager, userService, gameService));
+            screenManager.register(ScreenType.CUTSCENE,
+                    new CutsceneScreen(screenManager, cutsceneRepository, imageLoader));
+            screenManager.register(ScreenType.PLACEHOLDER, new BaseScreen(screenManager, new GridBagLayout()) {
+                @Override
+                public void onEnter() {
+                    screenManager.show(ScreenType.GAME);
+                }
+            });
+
             frame.add(mainContainer);
 
             // 시작화면 등장
             screenManager.show(ScreenType.START);
             frame.setVisible(true);
-
         });
     }
 }
