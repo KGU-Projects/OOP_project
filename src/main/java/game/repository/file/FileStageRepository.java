@@ -34,24 +34,17 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
-/**
- * data/stages/stageN.txt를 읽는 StageRepository 구현체.
- * 형식:
- * - 헤더(5칸): 번호|제목|개념|가로|세로
- * - 지형(세로 줄): #(벽), .(빈 공간/TRAP), P(시작 위치), M(MONSTER), S(CHEST/MIMIC),
- * D(EXIT), A(MOVE_PLATFORM)
- * - 오브젝트(8칸): ID|TYPE|x|y|quizId|reward|trigger|extra (기존
- * BUTTON/DOOR/KEY/ITEM/BOSS 형식도 함께 지원)
- */
 public class FileStageRepository implements StageRepository {
 
     private static final String FILE_PREFIX = "stage";
     private static final String FILE_SUFFIX = ".txt";
     private static final Pattern STAGE_FILE_PATTERN = Pattern.compile("stage(\\d{1,6})\\.txt");
     private static final Pattern OBJECT_ID_PATTERN = Pattern.compile("[A-Za-z0-9_]+");
+    private static final Pattern CUTSCENE_FILE_PATTERN = Pattern.compile("[A-Za-z0-9_-]+(\\.txt)?");
 
-    private static final int HEADER_FIELD_COUNT = 5; // 번호|제목|개념|가로|세로
-    private static final int OBJECT_FIELD_COUNT = 8; // ID|TYPE|x|y|quizId|reward|trigger|extra
+    private static final int MIN_HEADER_FIELD_COUNT = 5;
+    private static final int MAX_HEADER_FIELD_COUNT = 6;
+    private static final int OBJECT_FIELD_COUNT = 8;
     private static final int HEADER_LINE_NO = 1;
     private static final char START_CHAR = 'P';
     private static final String NO_EXTRA = "-";
@@ -114,9 +107,10 @@ public class FileStageRepository implements StageRepository {
         String fileName = path.getFileName().toString();
         LineReader reader = new LineReader(fileName, TextFileIO.readLines(path));
 
-        // 1. 헤더 한 줄: 번호|제목|개념|가로|세로
         String[] header = reader.nextFields("정보 줄");
-        reader.requireFieldCount(header, HEADER_FIELD_COUNT, "정보 줄");
+        if (header.length < MIN_HEADER_FIELD_COUNT || header.length > MAX_HEADER_FIELD_COUNT) {
+            throw reader.error("정보 줄은 5칸 또는 6칸이어야 하는데 " + header.length + "칸입니다");
+        }
         int number = reader.parseInt(header[0], "번호", 1);
         if (number != fileNumberOf(fileName)) {
             throw reader.error("정보 줄의 번호(" + number + ")가 파일 이름과 다릅니다");
@@ -125,8 +119,10 @@ public class FileStageRepository implements StageRepository {
         String concept = header[2];
         int width = reader.parseInt(header[3], "가로", 1);
         int height = reader.parseInt(header[4], "세로", 1);
+        String cutsceneFile = (header.length == MAX_HEADER_FIELD_COUNT)
+                ? parseCutsceneFile(reader, header[5])
+                : null;
 
-        // 2. 지형 격자 및 맵 오브젝트 마커 수집
         Tile[][] terrain = new Tile[height][width];
         Map<GridPos, Character> mapMarkers = new HashMap<>();
         int startX = -1;
@@ -160,7 +156,6 @@ public class FileStageRepository implements StageRepository {
             throw reader.errorAt(HEADER_LINE_NO, "지형에 시작 위치 P가 없습니다");
         }
 
-        // 3. 오브젝트 개수 및 오브젝트 정의
         int objectCount = reader.parseInt(reader.nextLine("오브젝트 개수").trim(), "오브젝트 개수", 0);
         List<GameObject> objects = new ArrayList<>();
         Map<String, Integer> lineNoById = new HashMap<>();
@@ -181,7 +176,18 @@ public class FileStageRepository implements StageRepository {
         reader.requireNoMoreContent();
 
         validateMapMarkers(reader.getFileName(), objects, lineNoById, mapMarkers);
-        return new Stage(number, title, concept, terrain, startX, startY, objects);
+        return new Stage(number, title, concept, terrain, startX, startY, objects, cutsceneFile);
+    }
+
+    private static String parseCutsceneFile(LineReader reader, String raw) {
+        String trimmed = raw.trim();
+        if (trimmed.isEmpty() || NO_EXTRA.equals(trimmed)) {
+            return null;
+        }
+        if (!CUTSCENE_FILE_PATTERN.matcher(trimmed).matches()) {
+            throw reader.error("올바르지 않은 컷신 파일명입니다: '" + trimmed + "'");
+        }
+        return trimmed;
     }
 
     private void validateMapMarkers(String fileName,

@@ -7,7 +7,7 @@ import game.model.object.GameObject;
 import java.util.List;
 import java.util.Optional;
 
-/** 스테이지 하나: 정보(번호|제목|개념|가로|세로), 지형 격자, 오브젝트 목록. */
+/** 스테이지 하나: 정보(번호|제목|개념|가로|세로[|컷신파일]), 지형 격자, 오브젝트 목록. */
 public class Stage {
 
     private static final int DEFAULT_THEME = 1;
@@ -23,15 +23,26 @@ public class Stage {
     private final int startTileX;
     private final int startTileY;
     private final List<GameObject> objects;
+    private final String cutsceneFile;
 
     public Stage(int number, String title, String concept,
             Tile[][] terrain, int startTileX, int startTileY, List<GameObject> objects) {
-        this(number, title, concept, inferType(objects), DEFAULT_THEME, terrain, startTileX, startTileY, objects);
+        this(number, title, concept, inferType(objects), DEFAULT_THEME, terrain, startTileX, startTileY, objects, null);
     }
 
-    /** 기존 호출부(StageType, theme 포함) 호환 생성자 */
+    public Stage(int number, String title, String concept,
+            Tile[][] terrain, int startTileX, int startTileY, List<GameObject> objects, String cutsceneFile) {
+        this(number, title, concept, inferType(objects), DEFAULT_THEME, terrain, startTileX, startTileY, objects,
+                cutsceneFile);
+    }
+
     public Stage(int number, String title, String concept, StageType type, int theme,
             Tile[][] terrain, int startTileX, int startTileY, List<GameObject> objects) {
+        this(number, title, concept, type, theme, terrain, startTileX, startTileY, objects, null);
+    }
+
+    public Stage(int number, String title, String concept, StageType type, int theme,
+            Tile[][] terrain, int startTileX, int startTileY, List<GameObject> objects, String cutsceneFile) {
         this.number = number;
         this.title = title;
         this.concept = concept;
@@ -43,6 +54,14 @@ public class Stage {
         this.startTileX = startTileX;
         this.startTileY = startTileY;
         this.objects = List.copyOf(objects);
+        this.cutsceneFile = normalizeCutsceneFile(cutsceneFile);
+    }
+
+    private static String normalizeCutsceneFile(String value) {
+        if (value == null || value.isBlank() || "-".equals(value.trim())) {
+            return null;
+        }
+        return value.trim();
     }
 
     private static StageType inferType(List<GameObject> objects) {
@@ -121,5 +140,13 @@ public class Stage {
 
     public List<GameObject> getObjects() {
         return objects;
+    }
+
+    public Optional<String> getCutsceneFile() {
+        return Optional.ofNullable(cutsceneFile);
+    }
+
+    public boolean hasCutscene() {
+        return cutsceneFile != null;
     }
 }

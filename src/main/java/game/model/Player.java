@@ -12,7 +12,7 @@ public class Player {
 
     private static final double MOVE_SPEED = 7.0;
     private static final double GRAVITY = 32.0;
-    private static final double JUMP_VELOCITY = -13.5;
+    private static final double JUMP_VELOCITY = -16.5;
     private static final double MAX_FALL_SPEED = 18.0;
     private static final double EPS = 1e-4;
 

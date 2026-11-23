@@ -1,1 +1,5 @@
 game/repository/file/FileStageRepository$1.class
+game/ui/screens/QuizBattleController$1.class
+game/ui/screens/QuizBattleLauncher$1.class
+game/ui/screens/GameScreen$3.class
+game/repository/file/FileQuizRepository$1.class

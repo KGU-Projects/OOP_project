@@ -76,6 +76,7 @@ public class GameScreen extends BaseScreen {
     private boolean paused = false;
 
     private GameState lastObservedState;
+    private boolean stageClearTransitionScheduled = false;
     private QuizBattleLauncher quizLauncher;
 
     private String statusText = "";
@@ -111,10 +112,19 @@ public class GameScreen extends BaseScreen {
             state.getPlayer().clearInputs();
             if (state != lastObservedState) {
                 lastObservedState = state;
+                stageClearTransitionScheduled = false;
                 setPaused(false);
                 camera.snapTo(state.getPlayer(), state.getStage());
-                showStatus("STAGE " + state.getStage().getNumber() + " - " + state.getStage().getTitle(), 2.0);
+
+                Optional<String> cutscene = state.getStage().getCutsceneFile();
+                if (cutscene.isPresent()
+                        && screenManager != null
+                        && screenManager.getScreen(ScreenType.CUTSCENE) instanceof CutsceneScreen cutsceneScreen) {
+                    cutsceneScreen.play(cutscene.get(), () -> screenManager.show(ScreenType.GAME));
+                    return;
+                }
             }
+            showStatus("STAGE " + state.getStage().getNumber() + " - " + state.getStage().getTitle(), 2.0);
         }
         if (!gameLoop.isRunning()) {
             gameLoop.start();
@@ -373,8 +383,28 @@ public class GameScreen extends BaseScreen {
         GameObject.InteractionOutcome outcome = gameService.updatePlayer(FIXED_DT);
         handleOutcome(outcome);
 
+        if (state.isStageCleared() && !stageClearTransitionScheduled) {
+            stageClearTransitionScheduled = true;
+            int clearedStageNo = state.getStage().getNumber();
+            Timer clearDelay = new Timer(1200, e -> advanceAfterStageClear(clearedStageNo));
+            clearDelay.setRepeats(false);
+            clearDelay.start();
+        }
+
         camera.follow(state.getPlayer(), state.getStage());
         canvas.repaint();
+    }
+
+    private void advanceAfterStageClear(int clearedStageNo) {
+        int nextStageNo = clearedStageNo + 1;
+        if (gameService != null && gameService.hasStage(nextStageNo) && gameService.loadStage(nextStageNo)) {
+            lastObservedState = null;
+            screenManager.show(ScreenType.GAME);
+            return;
+        }
+        if (screenManager != null) {
+            screenManager.show(ScreenType.START);
+        }
     }
 
     private void handleOutcome(GameObject.InteractionOutcome outcome) {
@@ -540,7 +570,6 @@ public class GameScreen extends BaseScreen {
             super(null);
             this.baseLayer = baseLayer;
             this.overlayLayer = overlayLayer;
-            // overlayLayer를 먼저 추가해야 Swing에서 최상단에 그려진다
             add(overlayLayer);
             add(baseLayer);
         }

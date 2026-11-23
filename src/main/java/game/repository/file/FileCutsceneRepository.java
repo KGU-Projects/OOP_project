@@ -11,10 +11,9 @@ import java.util.List;
 import java.util.Optional;
 import java.util.regex.Pattern;
 
-/** data/cutscenes/<id>.txt를 읽는 CutsceneRepository 구현체. */
 public class FileCutsceneRepository implements CutsceneRepository {
 
-    private static final int FIELD_COUNT = 4; // 배경이미지|화자이미지|화자|대사
+    private static final int FIELD_COUNT = 4;
     private static final Pattern VALID_ID = Pattern.compile("[A-Za-z0-9_-]+");
 
     private final Path directory;
@@ -24,11 +23,15 @@ public class FileCutsceneRepository implements CutsceneRepository {
     }
 
     @Override
-    public Optional<Cutscene> findById(String cutsceneId) {
-        if (cutsceneId == null || !VALID_ID.matcher(cutsceneId.trim()).matches()) {
-            throw new IllegalArgumentException("올바르지 않은 컷신 ID입니다: " + cutsceneId);
+    public Optional<Cutscene> findById(String cutsceneRef) {
+        if (cutsceneRef == null) {
+            throw new IllegalArgumentException("컷신 ID가 null입니다");
         }
-        String id = cutsceneId.trim();
+        String id = stripTxtExtension(cutsceneRef.trim());
+        if (!VALID_ID.matcher(id).matches()) {
+            throw new IllegalArgumentException("올바르지 않은 컷신 ID입니다: " + cutsceneRef);
+        }
+
         Path file = directory.resolve(id + ".txt");
         if (!Files.isRegularFile(file)) {
             return Optional.empty();
@@ -52,6 +55,13 @@ public class FileCutsceneRepository implements CutsceneRepository {
             return Optional.empty();
         }
         return Optional.of(new Cutscene(id, frames));
+    }
+
+    private static String stripTxtExtension(String value) {
+        if (value.length() > 4 && value.regionMatches(true, value.length() - 4, ".txt", 0, 4)) {
+            return value.substring(0, value.length() - 4);
+        }
+        return value;
     }
 
     private static CutsceneFrame parseFrame(String line) {
