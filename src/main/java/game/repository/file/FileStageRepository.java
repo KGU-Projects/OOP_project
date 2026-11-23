@@ -2,15 +2,22 @@ package game.repository.file;
 
 import game.model.ItemType;
 import game.model.Stage;
-import game.model.StageType;
 import game.model.Tile;
 import game.model.object.BossObject;
 import game.model.object.ButtonObject;
+import game.model.object.ChestObject;
 import game.model.object.DoorObject;
+import game.model.object.ExitObject;
 import game.model.object.GameObject;
 import game.model.object.ItemObject;
 import game.model.object.KeyObject;
+import game.model.object.MimicObject;
+import game.model.object.MonsterObject;
+import game.model.object.MovePlatformObject;
 import game.model.object.ObjectType;
+import game.model.object.RewardType;
+import game.model.object.TrapObject;
+import game.model.object.TriggerType;
 import game.repository.StageRepository;
 
 import java.io.IOException;
@@ -18,7 +25,6 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -29,8 +35,13 @@ import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 /**
- * data/stages/stageN.txt를 읽는 StageRepository 구현체. 형식은 docs/data-format.md를 따른다.
- * 형식이 틀리면 파일 이름과 줄 번호가 들어간 DataFormatException을 던진다.
+ * data/stages/stageN.txt를 읽는 StageRepository 구현체.
+ * 형식:
+ * - 헤더(5칸): 번호|제목|개념|가로|세로
+ * - 지형(세로 줄): #(벽), .(빈 공간/TRAP), P(시작 위치), M(MONSTER), S(CHEST/MIMIC),
+ * D(EXIT), A(MOVE_PLATFORM)
+ * - 오브젝트(8칸): ID|TYPE|x|y|quizId|reward|trigger|extra (기존
+ * BUTTON/DOOR/KEY/ITEM/BOSS 형식도 함께 지원)
  */
 public class FileStageRepository implements StageRepository {
 
@@ -39,11 +50,11 @@ public class FileStageRepository implements StageRepository {
     private static final Pattern STAGE_FILE_PATTERN = Pattern.compile("stage(\\d{1,6})\\.txt");
     private static final Pattern OBJECT_ID_PATTERN = Pattern.compile("[A-Za-z0-9_]+");
 
-
-    private static final int HEADER_FIELD_COUNT = 7;       // 번호|제목|개념|유형|테마|가로|세로
-    private static final int OBJECT_COMMON_FIELD_COUNT = 4; // ID|종류|x|y
+    private static final int HEADER_FIELD_COUNT = 5; // 번호|제목|개념|가로|세로
+    private static final int OBJECT_FIELD_COUNT = 8; // ID|TYPE|x|y|quizId|reward|trigger|extra
     private static final int HEADER_LINE_NO = 1;
     private static final char START_CHAR = 'P';
+    private static final String NO_EXTRA = "-";
 
     private final Path directory;
 
@@ -54,14 +65,13 @@ public class FileStageRepository implements StageRepository {
     @Override
     public List<Stage> findAll() {
         if (!Files.isDirectory(directory)) {
-            return List.of();   // 폴더가 아직 없으면 스테이지가 없는 것으로 본다
+            return List.of();
         }
         List<Path> files = listStageFiles();
         List<Stage> stages = new ArrayList<>();
         for (Path file : files) {
             stages.add(parse(file));
         }
-        validateBossIsLast(stages);
         return stages;
     }
 
@@ -80,8 +90,6 @@ public class FileStageRepository implements StageRepository {
         System.out.println("=== 스테이지 (" + directory + ") " + stages.size() + "개 ===");
         stages.forEach(System.out::println);
     }
-
-    // ---- 파일 목록 ----
 
     private List<Path> listStageFiles() {
         try (Stream<Path> paths = Files.list(directory)) {
@@ -102,24 +110,11 @@ public class FileStageRepository implements StageRepository {
         return Integer.parseInt(matcher.group(1));
     }
 
-    /** 보스 스테이지는 하나이고 번호가 가장 커야 한다. 파일 하나만으로는 알 수 없어서 목록에서 검사한다. */
-    private void validateBossIsLast(List<Stage> stages) {
-        for (int i = 0; i < stages.size(); i++) {
-            Stage stage = stages.get(i);
-            if (stage.getType() == StageType.BOSS && i != stages.size() - 1) {
-                throw new DataFormatException(FILE_PREFIX + stage.getNumber() + FILE_SUFFIX, HEADER_LINE_NO,
-                        "보스 스테이지는 번호가 가장 큰 스테이지여야 합니다");
-            }
-        }
-    }
-
-    // ---- 파일 하나 읽기 ----
-
     private Stage parse(Path path) {
         String fileName = path.getFileName().toString();
         LineReader reader = new LineReader(fileName, TextFileIO.readLines(path));
 
-        // 1. 정보 한 줄
+        // 1. 헤더 한 줄: 번호|제목|개념|가로|세로
         String[] header = reader.nextFields("정보 줄");
         reader.requireFieldCount(header, HEADER_FIELD_COUNT, "정보 줄");
         int number = reader.parseInt(header[0], "번호", 1);
@@ -128,15 +123,15 @@ public class FileStageRepository implements StageRepository {
         }
         String title = header[1];
         String concept = header[2];
-        StageType type = parseStageType(reader, header[3]);
-        int theme = reader.parseInt(header[4], "테마", 0);
-        int width = reader.parseInt(header[5], "가로", 1);
-        int height = reader.parseInt(header[6], "세로", 1);
+        int width = reader.parseInt(header[3], "가로", 1);
+        int height = reader.parseInt(header[4], "세로", 1);
 
-        // 2. 지형: 세로 값만큼의 줄, 각 줄 길이는 가로 값. 'P'는 시작 위치로 기억하고 빈 공간으로 바꾼다.
+        // 2. 지형 격자 및 맵 오브젝트 마커 수집
         Tile[][] terrain = new Tile[height][width];
+        Map<GridPos, Character> mapMarkers = new HashMap<>();
         int startX = -1;
         int startY = -1;
+
         for (int y = 0; y < height; y++) {
             String row = reader.nextLine("지형 " + (y + 1) + "번째 줄");
             if (row.length() != width) {
@@ -153,8 +148,11 @@ public class FileStageRepository implements StageRepository {
                     terrain[y][x] = Tile.EMPTY;
                 } else if (c == Tile.SOLID.getSymbol() || c == Tile.EMPTY.getSymbol()) {
                     terrain[y][x] = Tile.fromChar(c);
+                } else if (ObjectType.isMapObjectSymbol(c)) {
+                    terrain[y][x] = Tile.EMPTY;
+                    mapMarkers.put(new GridPos(x, y), c);
                 } else {
-                    throw reader.error("알 수 없는 지형 문자 '" + c + "' (x=" + x + "). 지형에는 #, ., P만 씁니다");
+                    throw reader.error("알 수 없는 지형 문자 '" + c + "' (x=" + x + "). #, ., P, M, S, D, A만 씁니다");
                 }
             }
         }
@@ -162,15 +160,17 @@ public class FileStageRepository implements StageRepository {
             throw reader.errorAt(HEADER_LINE_NO, "지형에 시작 위치 P가 없습니다");
         }
 
-        // 3. 오브젝트 개수와 오브젝트 줄
+        // 3. 오브젝트 개수 및 오브젝트 정의
         int objectCount = reader.parseInt(reader.nextLine("오브젝트 개수").trim(), "오브젝트 개수", 0);
         List<GameObject> objects = new ArrayList<>();
         Map<String, Integer> lineNoById = new HashMap<>();
+
         for (int i = 0; i < objectCount; i++) {
             String[] fields = reader.nextFields("오브젝트 " + (i + 1) + "번째 줄");
-            GameObject object = createObject(reader, fields);
+            GameObject object = createObject(reader, fields, width, height);
             if (lineNoById.containsKey(object.getId())) {
-                throw reader.error("오브젝트 ID '" + object.getId() + "'가 중복됩니다 (" + lineNoById.get(object.getId()) + "번째 줄)");
+                throw reader
+                        .error("오브젝트 ID '" + object.getId() + "'가 중복됩니다 (" + lineNoById.get(object.getId()) + "번째 줄)");
             }
             if (object.getX() + object.getWidth() > width || object.getY() + object.getHeight() > height) {
                 throw reader.error("오브젝트 '" + object.getId() + "'가 맵 범위(" + width + " x " + height + ")를 벗어납니다");
@@ -180,123 +180,167 @@ public class FileStageRepository implements StageRepository {
         }
         reader.requireNoMoreContent();
 
-        validateObjects(reader.getFileName(), type, objects, lineNoById);
-        return new Stage(number, title, concept, type, theme, terrain, startX, startY, objects);
+        validateMapMarkers(reader.getFileName(), objects, lineNoById, mapMarkers);
+        return new Stage(number, title, concept, terrain, startX, startY, objects);
     }
 
-    private StageType parseStageType(LineReader reader, String text) {
-        try {
-            return StageType.valueOf(text);
-        } catch (IllegalArgumentException e) {
-            throw reader.error("알 수 없는 스테이지 유형 '" + text + "' (NORMAL 또는 BOSS)");
-        }
-    }
+    private void validateMapMarkers(String fileName,
+            List<GameObject> objects,
+            Map<String, Integer> lineNoById,
+            Map<GridPos, Character> mapMarkers) {
+        Map<GridPos, Character> remaining = new HashMap<>(mapMarkers);
 
-    /** 오브젝트 사이의 관계 검사: 버튼이 가리키는 문, 열쇠와 보스의 개수. */
-    private void validateObjects(String fileName, StageType type, List<GameObject> objects,
-                                 Map<String, Integer> lineNoById) {
-        Map<String, GameObject> byId = new HashMap<>();
-        for (GameObject object : objects) {
-            byId.put(object.getId(), object);
-        }
-        int keyCount = 0;
-        int bossCount = 0;
-        for (GameObject object : objects) {
-            // 다른 오브젝트를 가리키는 오브젝트(버튼 → 문)는 대상이 있고 종류가 맞아야 한다
-            for (String linkedId : object.getLinkedIds()) {
-                GameObject target = byId.get(linkedId);
-                boolean typeMatches = object.getLinkedType().map(t -> target != null && target.getType() == t).orElse(true);
-                if (target == null || !typeMatches) {
-                    throw new DataFormatException(fileName, lineNoById.get(object.getId()),
-                            "'" + object.getId() + "'이(가) 가리키는 " + object.getLinkedType().map(Enum::name).orElse("오브젝트")
-                                    + " '" + linkedId + "'이(가) 같은 파일에 없습니다");
+        for (GameObject obj : objects) {
+            int lineNo = lineNoById.get(obj.getId());
+            if (!obj.getType().hasDedicatedMapSymbol()) {
+                GridPos pos = new GridPos(obj.getX(), obj.getY());
+                if (remaining.containsKey(pos)) {
+                    throw new DataFormatException(fileName, lineNo,
+                            obj.getType() + " '" + obj.getId() + "' 위치(" + obj.getX() + "," + obj.getY()
+                                    + ")는 '.' 칸이어야 합니다");
+                }
+                continue;
+            }
+
+            char expectedMapSymbol = obj.getType().getMapSymbol();
+            for (int dy = 0; dy < obj.getHeight(); dy++) {
+                for (int dx = 0; dx < obj.getWidth(); dx++) {
+                    GridPos pos = new GridPos(obj.getX() + dx, obj.getY() + dy);
+                    Character actual = remaining.remove(pos);
+                    if (actual == null || actual != expectedMapSymbol) {
+                        throw new DataFormatException(fileName, lineNo,
+                                "'" + obj.getId() + "'(" + obj.getType() + ")의 (" + pos.x + "," + pos.y
+                                        + ") 위치 지형 문자가 '" + expectedMapSymbol + "'가 아닙니다");
+                    }
                 }
             }
-            if (object.getType() == ObjectType.KEY) {
-                keyCount++;
-            } else if (object.getType() == ObjectType.BOSS) {
-                bossCount++;
-            }
         }
-        if (type == StageType.NORMAL && (keyCount != 1 || bossCount != 0)) {
+
+        if (!remaining.isEmpty()) {
+            GridPos orphan = remaining.keySet().iterator().next();
             throw new DataFormatException(fileName, HEADER_LINE_NO,
-                    "일반 스테이지에는 열쇠가 정확히 하나, 보스는 없어야 합니다 (열쇠 " + keyCount + "개, 보스 " + bossCount + "개)");
-        }
-        if (type == StageType.BOSS && bossCount != 1) {
-            throw new DataFormatException(fileName, HEADER_LINE_NO,
-                    "보스 스테이지에는 보스가 정확히 하나 있어야 합니다 (보스 " + bossCount + "개)");
+                    "지형 문자 '" + remaining.get(orphan) + "' (" + orphan.x + "," + orphan.y
+                            + ")에 대응하는 오브젝트 정의가 없습니다");
         }
     }
 
-    // ---- 오브젝트 팩토리: 종류 문자열을 객체로 바꾸는 코드는 여기 한 곳에만 둔다 ----
-
-    private GameObject createObject(LineReader reader, String[] fields) {
-        if (fields.length < OBJECT_COMMON_FIELD_COUNT) {
-            throw reader.error("오브젝트 줄은 최소 " + OBJECT_COMMON_FIELD_COUNT + "칸(ID|종류|x|y)이어야 합니다");
+    private GameObject createObject(LineReader reader, String[] fields, int mapWidth, int mapHeight) {
+        if (fields.length < 4) {
+            throw reader.error("오브젝트 줄의 칸 수가 부족합니다");
         }
-        String id = fields[0];
+
+        String id = fields[0].trim();
         if (!OBJECT_ID_PATTERN.matcher(id).matches()) {
             throw reader.error("오브젝트 ID '" + id + "'는 영문, 숫자, _만 쓸 수 있습니다");
         }
-        ObjectType type = parseObjectType(reader, fields[1]);
+
+        ObjectType type = parseEnum(reader, ObjectType.class, fields[1].trim(), "오브젝트 종류");
         int x = reader.parseInt(fields[2], "x", 0);
         int y = reader.parseInt(fields[3], "y", 0);
 
-        switch (type) {
-            case BUTTON: {
-                reader.requireFieldCount(fields, OBJECT_COMMON_FIELD_COUNT + 2, "BUTTON 줄(문제ID, 열 문ID 목록)");
-                int quizId = reader.parseInt(fields[4], "문제ID", 1);
-                List<String> doorIds = Arrays.stream(fields[5].split(RecordParser.LIST_DELIMITER, -1)).map(String::trim).toList();
-                if (doorIds.stream().anyMatch(String::isEmpty)) {
-                    throw reader.error("BUTTON의 열 문ID 목록이 비어 있거나 ','가 잘못 쓰였습니다");
+        return switch (type) {
+            case MONSTER -> {
+                ParsedSchemaFields schema = parseSchemaFields(reader, fields);
+                requireNoExtra(reader, schema.extra, type);
+                yield new MonsterObject(id, x, y, schema.quizId, schema.reward, schema.trigger);
+            }
+            case CHEST -> {
+                ParsedSchemaFields schema = parseSchemaFields(reader, fields);
+                requireNoExtra(reader, schema.extra, type);
+                yield new ChestObject(id, x, y, schema.quizId, schema.reward, schema.trigger);
+            }
+            case MIMIC -> {
+                ParsedSchemaFields schema = parseSchemaFields(reader, fields);
+                requireNoExtra(reader, schema.extra, type);
+                yield new MimicObject(id, x, y, schema.quizId, schema.reward, schema.trigger);
+            }
+            case TRAP -> {
+                ParsedSchemaFields schema = parseSchemaFields(reader, fields);
+                requireNoExtra(reader, schema.extra, type);
+                yield new TrapObject(id, x, y, schema.quizId, schema.reward, schema.trigger);
+            }
+            case EXIT -> {
+                ParsedSchemaFields schema = parseSchemaFields(reader, fields);
+                requireNoExtra(reader, schema.extra, type);
+                yield new ExitObject(id, x, y, schema.quizId, schema.reward, schema.trigger);
+            }
+            case MOVE_PLATFORM -> {
+                ParsedSchemaFields schema = parseSchemaFields(reader, fields);
+                String[] coords = schema.extra.split(RecordParser.LIST_DELIMITER, -1);
+                if (coords.length != 2) {
+                    throw reader.error("MOVE_PLATFORM의 이동 좌표는 'x,y' 형식이어야 합니다: '" + schema.extra + "'");
                 }
-                return new ButtonObject(id, x, y, quizId, doorIds);
+                int targetX = reader.parseInt(coords[0], "이동 x", 0);
+                int targetY = reader.parseInt(coords[1], "이동 y", 0);
+                if (targetX >= mapWidth || targetY >= mapHeight) {
+                    throw reader.error("MOVE_PLATFORM 목표 좌표(" + targetX + "," + targetY + ")가 맵 범위를 벗어납니다");
+                }
+                yield new MovePlatformObject(id, x, y, schema.quizId, schema.reward, schema.trigger, targetX, targetY);
             }
-            case DOOR: {
-                reader.requireFieldCount(fields, OBJECT_COMMON_FIELD_COUNT + 1, "DOOR 줄(높이)");
-                return new DoorObject(id, x, y, reader.parseInt(fields[4], "문 높이", 1));
+            case BUTTON -> {
+                reader.requireFieldCount(fields, 6, "BUTTON 줄");
+                int quizId = reader.parseInt(fields[4], "quizId", 1);
+                List<String> doorIds = List.of(fields[5].trim().split(RecordParser.LIST_DELIMITER, -1));
+                yield new ButtonObject(id, x, y, quizId, doorIds);
             }
-            case KEY: {
-                reader.requireFieldCount(fields, OBJECT_COMMON_FIELD_COUNT, "KEY 줄(세부값 없음)");
-                return new KeyObject(id, x, y);
+            case DOOR -> {
+                reader.requireFieldCount(fields, 5, "DOOR 줄");
+                int doorHeight = reader.parseInt(fields[4], "높이", 1);
+                yield new DoorObject(id, x, y, doorHeight);
             }
-            case ITEM: {
-                reader.requireFieldCount(fields, OBJECT_COMMON_FIELD_COUNT + 2, "ITEM 줄(아이템 종류, 개수)");
-                ItemType itemType = parseItemType(reader, fields[4]);
-                return new ItemObject(id, x, y, itemType, reader.parseInt(fields[5], "아이템 개수", 1));
+            case KEY -> {
+                reader.requireFieldCount(fields, 4, "KEY 줄");
+                yield new KeyObject(id, x, y);
             }
-            case BOSS: {
-                reader.requireFieldCount(fields, OBJECT_COMMON_FIELD_COUNT + 2, "BOSS 줄(보스 이름, 최대 체력)");
-                return new BossObject(id, x, y, fields[4], reader.parseInt(fields[5], "보스 최대 체력", 1));
+            case ITEM -> {
+                reader.requireFieldCount(fields, 6, "ITEM 줄");
+                ItemType itemType = parseEnum(reader, ItemType.class, fields[4].trim(), "아이템 종류");
+                int count = reader.parseInt(fields[5], "개수", 1);
+                yield new ItemObject(id, x, y, itemType, count);
             }
-            default:
-                throw reader.error("처리할 수 없는 오브젝트 종류: " + type);
+            case BOSS -> {
+                reader.requireFieldCount(fields, 6, "BOSS 줄");
+                String name = fields[4].trim();
+                int maxHp = reader.parseInt(fields[5], "체력", 1);
+                yield new BossObject(id, x, y, name, maxHp);
+            }
+        };
+    }
+
+    private record ParsedSchemaFields(int quizId, RewardType reward, TriggerType trigger, String extra) {
+    }
+
+    private static ParsedSchemaFields parseSchemaFields(LineReader reader, String[] fields) {
+        reader.requireFieldCount(fields, OBJECT_FIELD_COUNT, "오브젝트 줄(ID|TYPE|x|y|quizId|reward|trigger|extra)");
+        int quizId = reader.parseInt(fields[4], "quizId", 0);
+        RewardType reward = parseEnum(reader, RewardType.class, fields[5].trim(), "보상 유형");
+        TriggerType trigger = parseEnum(reader, TriggerType.class, fields[6].trim(), "트리거 유형");
+        String extra = fields[7].trim();
+        return new ParsedSchemaFields(quizId, reward, trigger, extra);
+    }
+
+    private static void requireNoExtra(LineReader reader, String extra, ObjectType type) {
+        if (!NO_EXTRA.equals(extra)) {
+            throw reader.error(type + "의 마지막 칸은 '-'여야 합니다: '" + extra + "'");
         }
     }
 
-    private ObjectType parseObjectType(LineReader reader, String text) {
+    private static <E extends Enum<E>> E parseEnum(LineReader reader, Class<E> enumType, String text, String label) {
         try {
-            return ObjectType.valueOf(text);
+            return Enum.valueOf(enumType, text);
         } catch (IllegalArgumentException e) {
-            throw reader.error("알 수 없는 오브젝트 종류 '" + text + "'");
+            throw reader.error("알 수 없는 " + label + " '" + text + "'");
         }
     }
 
-    private ItemType parseItemType(LineReader reader, String text) {
-        try {
-            return ItemType.valueOf(text);
-        } catch (IllegalArgumentException e) {
-            throw reader.error("알 수 없는 아이템 종류 '" + text + "'");
-        }
+    private record GridPos(int x, int y) {
     }
-
-    // ---- 줄 번호를 기억하며 읽는 도우미 ----
 
     private static final class LineReader {
 
         private final String fileName;
         private final List<String> lines;
-        private int nextIndex = 0;   // 다음에 읽을 줄(0부터)
+        private int nextIndex = 0;
 
         LineReader(String fileName, List<String> lines) {
             this.fileName = fileName;
@@ -307,7 +351,6 @@ public class FileStageRepository implements StageRepository {
             return fileName;
         }
 
-        /** 방금 읽은 줄의 번호(1부터). */
         int currentLineNo() {
             return nextIndex;
         }
@@ -320,7 +363,7 @@ public class FileStageRepository implements StageRepository {
         }
 
         String[] nextFields(String what) {
-            return nextLine(what).split(RecordParser.FIELD_SPLIT, -1);   // -1: 끝의 빈 칸을 지우지 않는다
+            return nextLine(what).split(RecordParser.FIELD_SPLIT, -1);
         }
 
         void requireFieldCount(String[] fields, int expected, String what) {
@@ -342,7 +385,6 @@ public class FileStageRepository implements StageRepository {
             return value;
         }
 
-        /** 오브젝트 줄 뒤에 내용이 남아 있으면 개수가 틀린 것이다. 끝의 빈 줄은 허용한다. */
         void requireNoMoreContent() {
             for (int i = nextIndex; i < lines.size(); i++) {
                 if (!lines.get(i).isBlank()) {
@@ -351,7 +393,6 @@ public class FileStageRepository implements StageRepository {
             }
         }
 
-        /** 방금 읽은 줄에서 난 오류. */
         DataFormatException error(String message) {
             return errorAt(Math.max(nextIndex, 1), message);
         }

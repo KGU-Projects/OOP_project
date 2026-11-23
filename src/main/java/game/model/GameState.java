@@ -12,13 +12,12 @@ import java.util.Set;
 
 /**
  * 한 스테이지 플레이 중 변하는 런타임 상태.
- * 불변 객체인 Stage / GameObject 정의와 분리되어 문 열림, 버튼 해결, 아이템 획득 등을 관리한다.
- * 
- * AI딸깍으로 만들었으니 추후에 제거바람
+ * 불변 객체인 Stage / GameObject 정의와 분리되어 플레이어 위치, 문 열림, 버튼 해결, 아이템 획득 등을 관리한다.
  */
 public class GameState {
 
     private final Stage stage;
+    private final Player player;
     private final int maxHp;
     private int hp;
     private int score;
@@ -27,6 +26,7 @@ public class GameState {
     private final Set<String> openDoorIds = new HashSet<>();
     private final Set<String> solvedButtonIds = new HashSet<>();
     private final Set<String> collectedObjectIds = new HashSet<>();
+    private final Set<String> resolvedObjectIds = new HashSet<>();
 
     private int bossMaxHp;
     private int bossHp;
@@ -34,6 +34,7 @@ public class GameState {
 
     public GameState(Stage stage, int maxHp, SaveData saveData) {
         this.stage = stage;
+        this.player = new Player(stage.getStartX(), stage.getStartY());
         this.maxHp = maxHp;
         this.inventory = new EnumMap<>(ItemType.class);
         for (ItemType type : ItemType.values()) {
@@ -60,6 +61,10 @@ public class GameState {
 
     public Stage getStage() {
         return stage;
+    }
+
+    public Player getPlayer() {
+        return player;
     }
 
     public int getMaxHp() {
@@ -107,7 +112,7 @@ public class GameState {
     /** 물약 사용 등 소모성 아이템 차감 */
     public boolean consumeItem(ItemType type) {
         if (type == ItemType.KEY) {
-            return false; // 열쇠는 직접 사용 불가
+            return false;
         }
         int current = getItemCount(type);
         if (current <= 0) {
@@ -145,6 +150,14 @@ public class GameState {
         collectedObjectIds.add(objectId);
     }
 
+    public boolean isObjectResolved(String objectId) {
+        return resolvedObjectIds.contains(objectId);
+    }
+
+    public void markObjectResolved(String objectId) {
+        resolvedObjectIds.add(objectId);
+    }
+
     public boolean hasBoss() {
         return bossMaxHp > 0;
     }
@@ -169,7 +182,7 @@ public class GameState {
         this.stageCleared = stageCleared;
     }
 
-    /** 스테이지 클리어 시점의 SaveData 생성 (UserService 연동 시 그대로 저장 가능) */
+    /** 스테이지 클리어 시점의 SaveData 생성 */
     public SaveData toSaveData(LocalDateTime savedAt) {
         return new SaveData(
                 stage.getNumber(),

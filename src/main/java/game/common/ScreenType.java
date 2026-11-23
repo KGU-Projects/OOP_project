@@ -8,5 +8,6 @@ public enum ScreenType {
     GAME,
     PAUSE,
     QUIZ,
+    CUTSCENE,
     PLACEHOLDER
 }

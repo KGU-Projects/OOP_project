@@ -31,7 +31,10 @@ public final class TextFileIO {
         }
     }
 
-    /** 줄들을 UTF-8로 파일에 덮어쓴다. 부모 폴더가 없으면 만든다. 임시 파일에 먼저 쓴 뒤 옮겨서, 쓰다가 실패해도 원래 파일이 깨지지 않게 한다. */
+    /**
+     * 줄들을 UTF-8로 파일에 덮어쓴다. 부모 폴더가 없으면 만든다. 임시 파일에 먼저 쓴 뒤 옮겨서, 쓰다가 실패해도 원래 파일이 깨지지
+     * 않게 한다.
+     */
     public static void writeLines(Path path, List<String> lines) {
         try {
             Path parent = path.toAbsolutePath().getParent();
