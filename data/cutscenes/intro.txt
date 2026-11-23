@@ -1,0 +1,3 @@
+# 배경이미지|화자이미지|화자|대사
+start-wallpaper.png|portrait_kwaksupreme.png|곽 슈프림|어쩌고저쩌고??
+-|portrait_protagonist.png|키보드 용사|저쩌고!!

@@ -1,5 +1,7 @@
 package game.model.object;
 
+import game.model.GameState;
+
 /** 폭 1타일, 아래로 height만큼 막는 문. 처음에는 닫혀 있다. */
 public class DoorObject extends GameObject {
 
@@ -18,6 +20,11 @@ public class DoorObject extends GameObject {
     @Override
     public ObjectType getType() {
         return ObjectType.DOOR;
+    }
+
+    @Override
+    public boolean isSolid(GameState state) {
+        return !state.isDoorOpen(getId());
     }
 
     @Override
