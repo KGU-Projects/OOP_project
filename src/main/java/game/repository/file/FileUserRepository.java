@@ -1,5 +1,6 @@
 package game.repository.file;
 
+import game.common.NicknameRules;
 import game.model.User;
 import game.repository.UserRepository;
 

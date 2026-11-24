@@ -15,6 +15,8 @@ public final class GameConstants {
     /** 세이브 폴더(saves/<닉네임>/slotN.txt)의 루트. */
     public static final String SAVE_DIRECTORY = "data/saves";
 
+    public static final String USER_DIRECTORY = "data/users.txt";
+
     public static final String CUTSCENE_DIRECTORY = "data/cutscenes";
 
     /** 사용자당 세이브 슬롯 수. 슬롯 번호는 1부터 이 값까지다. */
