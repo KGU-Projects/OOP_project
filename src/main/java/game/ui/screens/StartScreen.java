@@ -24,7 +24,7 @@ public class StartScreen extends BaseScreen {
 
     private static final String BACKGROUND_IMAGE = "start-wallpaper.png";
 
-    private record MenuItem(String label, String imageFile, boolean drawText, Runnable action) {
+    private record MenuItem(String label, Runnable action) {
     }
 
     private final BufferedImage backgroundImage;
@@ -45,32 +45,25 @@ public class StartScreen extends BaseScreen {
         backgroundPanel.setBorder(new EmptyBorder(40, 50, 40, 50));
 
         GridBagConstraints gbc = new GridBagConstraints();
-
-        // 패딩
         gbc.gridx = 0;
         gbc.gridy = 1;
         gbc.weightx = 1.0;
         gbc.weighty = 1.0;
-        gbc.anchor = GridBagConstraints.NORTHWEST;
-        gbc.insets = new Insets(0, 0, 30, 0);
+        gbc.anchor = GridBagConstraints.WEST;
+        gbc.insets = new Insets(0, 0, 0, 0);
 
-        // 좌측 버튼 (완성형 버튼 이미지면 drawText = false, 빈 틀 이미지 위에 글자를 얹으려면 true)
         List<MenuItem> menuItems = List.of(
-                new MenuItem("시작", "startscreen-startbutton.png", false, () -> screenManager.show(ScreenType.GAME)),
-                new MenuItem("불러오기", "startscreen-loadbutton.png", false, () -> screenManager.show(ScreenType.LOAD)),
-                new MenuItem("컷신", "startscreen-loadbutton.png", false, () -> screenManager.show(ScreenType.CUTSCENE)),
-                new MenuItem("종료", "startscreen-exitbutton.png", false, () -> System.exit(0)));
+                new MenuItem("시작", () -> screenManager.show(ScreenType.GAME)),
+                new MenuItem("불러오기", () -> screenManager.show(ScreenType.LOAD)),
+                new MenuItem("종료", () -> System.exit(0)));
 
         JPanel buttonPanel = new JPanel(new GridLayout(menuItems.size(), 1, 0, 15));
         buttonPanel.setOpaque(false);
         for (MenuItem item : menuItems) {
-            buttonPanel.add(new GameButton(item.label(), item.imageFile(), item.drawText(), item.action()));
+            buttonPanel.add(new GameButton(item.label(), item.action()));
         }
 
-        gbc.anchor = GridBagConstraints.WEST;
-        gbc.insets = new Insets(0, 0, 0, 0);
         backgroundPanel.add(buttonPanel, gbc);
-
         panel.add(backgroundPanel, BorderLayout.CENTER);
     }
 
