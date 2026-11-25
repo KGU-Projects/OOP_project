@@ -17,6 +17,7 @@ import game.service.GameService;
 import game.service.UserService;
 import game.ui.BaseScreen;
 import game.ui.ScreenManager;
+import game.ui.components.NicknamePopup;
 import game.ui.screens.CutsceneScreen;
 import game.ui.screens.GameScreen;
 import game.ui.screens.LoadScreen;
@@ -57,11 +58,14 @@ public class GameApp {
             ScreenManager screenManager = new ScreenManager(mainContainer, cardLayout);
             // 기존: UserService userService = new UserService(); => 유저서비스 파일 완성해서 수정함.
             // users.txt를 읽고 쓰는 사용자 창고(FileUserRepository)를 만들어 UserService에 넘김.
-            UserService userService = new UserService(new FileUserRepository(Path.of("data/users.txt")));
+            UserService userService = new UserService(
+                    new FileUserRepository(Path.of(GameConstants.USER_DIRECTORY)));
+
             GameService gameService = new GameService(
                     new FileQuizRepository(Path.of(GameConstants.QUIZ_FILE)),
                     new FileStageRepository(Path.of(GameConstants.STAGE_DIRECTORY)),
-                    new FileSaveRepository(Path.of(GameConstants.SAVE_DIRECTORY)));
+                    new FileSaveRepository(Path.of(GameConstants.SAVE_DIRECTORY)),
+                    userService);
             CutsceneRepository cutsceneRepository = new FileCutsceneRepository(
                     Path.of(GameConstants.CUTSCENE_DIRECTORY));
             ImageLoader imageLoader = new ImageLoader();
@@ -85,6 +89,9 @@ public class GameApp {
             // 시작화면 등장
             screenManager.show(ScreenType.START);
             frame.setVisible(true);
+
+            // 닉네임을 입력해야 게임을 진행할 수 있다. 처음 보는 닉네임은 이 안에서 바로 users.txt에 저장된다.
+            NicknamePopup.show(frame, userService, gameService::setUser);
         });
     }
 }

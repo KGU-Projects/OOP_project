@@ -7,6 +7,7 @@ import game.model.ItemType;
 import game.model.Player;
 import game.model.SaveData;
 import game.model.Stage;
+import game.model.User;
 import game.model.object.GameObject;
 import game.model.quiz.Quiz;
 import game.repository.QuizRepository;
@@ -24,20 +25,61 @@ public class GameService {
     private static final int FIRST_STAGE = 1;
     private static final int MAX_HP = 3;
     private static final int WRONG_ANSWER_DAMAGE = 1;
-    private static final String DEFAULT_NICKNAME = "Player";
 
     private final QuizRepository quizRepository;
     private final StageRepository stageRepository;
     private final SaveRepository saveRepository;
+    /** 스테이지 클리어 기록(users.txt)을 남길 곳. 없으면(null) 세이브만 한다. */
+    private final UserService userService;
+    /** 현재 플레이 중인 사용자. 입장 전에는 null. */
+    private User user;
+    /** 현재 사용자의 닉네임. 세이브 폴더 이름으로 쓴다. 입장 전에는 null. */
+    private String nickname;
     private GameState state;
     private int currentSlot;
     private Quiz currentQuiz;
     private GameObject currentTarget;
 
     public GameService(QuizRepository quizRepository, StageRepository stageRepository, SaveRepository saveRepository) {
+        this(quizRepository, stageRepository, saveRepository, null);
+    }
+
+    public GameService(QuizRepository quizRepository, StageRepository stageRepository, SaveRepository saveRepository,
+            UserService userService) {
         this.quizRepository = quizRepository;
         this.stageRepository = stageRepository;
         this.saveRepository = saveRepository;
+        this.userService = userService;
+    }
+
+    /**
+     * 플레이할 사용자를 정한다. 이후 저장·불러오기는 이 사용자의 세이브 폴더를 쓰고,
+     * 스테이지 클리어 기록도 이 사용자 앞으로 남는다.
+     * 사용자가 바뀌면 진행 중이던 게임과 슬롯 정보는 버린다.
+     */
+    public void setUser(User user) {
+        if (user == null) {
+            throw new IllegalArgumentException("사용자가 없습니다");
+        }
+        if (!user.getNickname().equals(this.nickname)) {
+            this.state = null;
+            this.currentSlot = 0;
+            this.currentQuiz = null;
+            this.currentTarget = null;
+        }
+        this.user = user;
+        this.nickname = user.getNickname();
+    }
+
+    public String getNickname() {
+        return nickname;
+    }
+
+    private String requireNickname() {
+        if (nickname == null) {
+            throw new IllegalStateException("닉네임이 정해지지 않았습니다");
+        }
+        return nickname;
     }
 
     public void startNewGame() {
@@ -49,7 +91,7 @@ public class GameService {
     }
 
     public void continueGame(int slot) {
-        SaveData save = saveRepository.find(DEFAULT_NICKNAME, slot)
+        SaveData save = saveRepository.find(requireNickname(), slot)
                 .orElseThrow(() -> new IllegalStateException(slot + "번 저장 칸이 비어 있습니다"));
         Stage stage = stageRepository.findByNumber(save.getNextStageNo())
                 .or(() -> stageRepository.findByNumber(save.getClearedStage()))
@@ -79,13 +121,17 @@ public class GameService {
                 state.getScore(),
                 inventory,
                 LocalDateTime.now());
-        saveRepository.save(DEFAULT_NICKNAME, targetSlot, data);
+        saveRepository.save(requireNickname(), targetSlot, data);
         this.currentSlot = targetSlot;
+        // users.txt의 최고점수·클리어 수·마지막 플레이 일시도 함께 갱신한다
+        if (userService != null) {
+            userService.recordStageClear(user, state.getScore());
+        }
         return targetSlot;
     }
 
     public void deleteSave(int slot) {
-        saveRepository.delete(DEFAULT_NICKNAME, slot);
+        saveRepository.delete(requireNickname(), slot);
         if (currentSlot == slot) {
             currentSlot = 0;
         }
@@ -99,7 +145,7 @@ public class GameService {
         LocalDateTime oldestTime = null;
 
         for (int slot = 1; slot <= GameConstants.SAVE_SLOT_COUNT; slot++) {
-            Optional<SaveData> existing = saveRepository.find(DEFAULT_NICKNAME, slot);
+            Optional<SaveData> existing = saveRepository.find(requireNickname(), slot);
             if (existing.isEmpty()) {
                 return slot;
             }
@@ -115,7 +161,8 @@ public class GameService {
     public List<Optional<SaveData>> getAllSaveSlots() {
         List<Optional<SaveData>> slots = new ArrayList<>(GameConstants.SAVE_SLOT_COUNT);
         for (int slot = 1; slot <= GameConstants.SAVE_SLOT_COUNT; slot++) {
-            slots.add(saveRepository.find(DEFAULT_NICKNAME, slot));
+            // 닉네임 입력 전(화면을 미리 만들 때)에는 모든 칸을 빈 칸으로 보여 준다
+            slots.add(nickname == null ? Optional.empty() : saveRepository.find(nickname, slot));
         }
         return slots;
     }
@@ -134,7 +181,7 @@ public class GameService {
             return false;
         }
         SaveData carryOver = (currentSlot != 0)
-                ? saveRepository.find(DEFAULT_NICKNAME, currentSlot).orElse(null)
+                ? saveRepository.find(requireNickname(), currentSlot).orElse(null)
                 : null;
         this.state = new GameState(nextStage.get(), MAX_HP, carryOver);
         cancelQuiz();

@@ -1,6 +1,7 @@
 package game.repository.file;
 
 import game.common.GameConstants;
+import game.common.NicknameRules;
 import game.model.ItemType;
 import game.model.SaveData;
 import game.repository.SaveRepository;
