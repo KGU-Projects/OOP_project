@@ -7,6 +7,7 @@ import game.model.Player;
 import game.model.Stage;
 import game.model.object.GameObject;
 import game.ui.Camera;
+import game.ui.components.MiniMap;
 
 import javax.swing.JPanel;
 import java.awt.AlphaComposite;
@@ -46,6 +47,8 @@ final class MapCanvas extends JPanel {
     private final PlayerAnimator playerAnimator;
     private final Map<Long, BufferedImage> terrainSpriteCache = new HashMap<>();
     private final Map<Long, BufferedImage> playerSpriteCache = new HashMap<>();
+
+    private MiniMap miniMap;
 
     private Stage cachedTerrainStage;
     private int cachedTerrainTileSize = -1;
@@ -89,6 +92,10 @@ final class MapCanvas extends JPanel {
 
         setFocusable(true);
         setBackground(Color.BLACK);
+    }
+
+    void setMiniMap(MiniMap miniMap) {
+        this.miniMap = miniMap;
     }
 
     @Override
@@ -399,6 +406,11 @@ final class MapCanvas extends JPanel {
         g2.setColor(Color.WHITE);
         g2.drawRect(vx + 8, vy + 8, boxW, boxH);
         g2.drawString(hud, vx + 16, vy + 24);
+
+        if (miniMap != null) {
+            // HUD 텍스트 박스(높이 24) 아래 왼쪽 위에 미니맵을 그린다.
+            miniMap.draw(g2, state, vx + 8, vy + 8 + boxH + 6, vx, vy, vw, vh);
+        }
 
         String statusText = statusSupplier.get();
         if (statusText != null && !statusText.isBlank()) {

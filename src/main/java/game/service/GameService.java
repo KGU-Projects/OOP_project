@@ -171,6 +171,19 @@ public class GameService {
         return currentSlot;
     }
 
+    /** 번호 순 전체 스테이지 목록(미니맵의 방 목록용). */
+    public List<Stage> getAllStages() {
+        // findAll()은 파일 하나가 잘못되면 전체가 실패하므로, 번호가 이어지는 동안만 하나씩 읽는다.
+        List<Stage> stages = new ArrayList<>();
+        for (int no = FIRST_STAGE; ; no++) {
+            Optional<Stage> stage = stageRepository.findByNumber(no);
+            if (stage.isEmpty()) {
+                return stages;
+            }
+            stages.add(stage.get());
+        }
+    }
+
     public boolean hasStage(int stageNo) {
         return stageRepository.findByNumber(stageNo).isPresent();
     }

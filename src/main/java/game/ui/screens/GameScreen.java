@@ -10,6 +10,7 @@ import game.service.GameService;
 import game.ui.BaseScreen;
 import game.ui.Camera;
 import game.ui.ImageLoader;
+import game.ui.components.MiniMap;
 import game.ui.ScreenManager;
 import game.ui.components.GameButton;
 
@@ -59,6 +60,7 @@ public class GameScreen extends BaseScreen {
 
     private final Camera camera;
     private final MapCanvas canvas;
+    private final MiniMap miniMap;
     private final Timer gameLoop;
 
     private final PauseOverlayPanel pauseOverlay;
@@ -91,6 +93,9 @@ public class GameScreen extends BaseScreen {
                 this::currentStatusText,
                 placeholderTexture,
                 playerAnimator);
+
+        this.miniMap = new MiniMap(gameService::getAllStages);
+        canvas.setMiniMap(miniMap);
 
         this.pauseOverlay = createPauseOverlay();
 
@@ -333,6 +338,7 @@ public class GameScreen extends BaseScreen {
             }
         });
         bindAction(im, am, KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0, false), "escape", this::handleEscape);
+        bindAction(im, am, KeyStroke.getKeyStroke(KeyEvent.VK_M, 0, false), "minimap", miniMap::toggleOverview);
     }
 
     @FunctionalInterface
@@ -451,6 +457,10 @@ public class GameScreen extends BaseScreen {
     }
 
     private void handleEscape() {
+        if (miniMap.isOverviewVisible()) {
+            miniMap.closeOverview();
+            return;
+        }
         setPaused(!paused);
     }
 
