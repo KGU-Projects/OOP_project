@@ -3,7 +3,6 @@ package game.audio;
 import javax.sound.sampled.AudioFormat;
 import javax.sound.sampled.AudioInputStream;
 import javax.sound.sampled.AudioSystem;
-import javax.sound.sampled.UnsupportedAudioFileException;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -81,8 +80,6 @@ public final class AudioAssetGenerator {
         }
         try (AudioInputStream audio = new AudioInputStream(new ByteArrayInputStream(pcm), FORMAT, pcm.length / 2L)) {
             AudioSystem.write(audio, javax.sound.sampled.AudioFileFormat.Type.WAVE, path.toFile());
-        } catch (UnsupportedAudioFileException e) {
-            throw new IOException("WAV format is not supported", e);
         }
     }
 }
