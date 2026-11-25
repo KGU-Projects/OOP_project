@@ -1,5 +1,6 @@
 package game.ui;
 
+import game.audio.AudioManager;
 import game.common.ScreenType;
 
 import java.awt.CardLayout;
@@ -12,10 +13,8 @@ public class ScreenManager {
     private final JPanel container;
     private final CardLayout layout;
     private final Map<ScreenType, Screen> screens = new EnumMap<>(ScreenType.class);
-
     private ScreenType currentType;
 
-    // 컨스트럭터
     public ScreenManager(JPanel container, CardLayout layout) {
         if (container == null || layout == null) {
             throw new IllegalArgumentException("ERROR: Container or CardLayout returned null");
@@ -24,23 +23,18 @@ public class ScreenManager {
         this.layout = layout;
     }
 
-    // 화면등록
     public void register(ScreenType type, Screen screen) {
-
         if (type == null || screen == null) {
             throw new IllegalArgumentException("ERROR: ScreenType or Screen returned null");
         }
-
         screens.put(type, screen);
         container.add(screen.getPanel(), type.name());
     }
 
-    // 화면등장
     public void show(ScreenType type) {
         if (type == null || !screens.containsKey(type)) {
             throw new IllegalArgumentException("ScreenType not registered: " + type);
         }
-
         if (currentType != null) {
             Screen currentScreen = screens.get(currentType);
             if (currentScreen != null) {
@@ -51,10 +45,9 @@ public class ScreenManager {
                 }
             }
         }
-
         currentType = type;
         layout.show(container, type.name());
-
+        AudioManager.getInstance().onScreenChanged(type);
         Screen nextScreen = screens.get(type);
         if (nextScreen != null) {
             try {
@@ -63,15 +56,8 @@ public class ScreenManager {
                 e.printStackTrace();
             }
         }
-
     }
 
-    public ScreenType getCurrentType() {
-        return currentType;
-    }
-
-    public Screen getScreen(ScreenType type) {
-        return screens.get(type);
-    }
-
+    public ScreenType getCurrentType() { return currentType; }
+    public Screen getScreen(ScreenType type) { return screens.get(type); }
 }
