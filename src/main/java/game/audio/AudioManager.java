@@ -1,5 +1,6 @@
 package game.audio;
 
+import javax.sound.sampled.AudioFormat;
 import javax.sound.sampled.AudioInputStream;
 import javax.sound.sampled.AudioSystem;
 import javax.sound.sampled.Clip;
@@ -8,15 +9,24 @@ import javax.sound.sampled.LineUnavailableException;
 import javax.sound.sampled.UnsupportedAudioFileException;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
+import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.EnumMap;
 import java.util.Map;
 
-/** Centralized WAV playback for background music and one-shot effects. */
+/** Centralized playback for background music and one-shot effects. */
 public final class AudioManager {
     public enum Track {
-        START("bgm-start.wav"), GAME("bgm-game.wav"), QUIZ("bgm-quiz.wav");
+        START("bgm-start.wav"), GAME("bgm-game.mp3", "bgm-game.wav"), QUIZ("bgm-quiz.wav");
         private final String file;
-        Track(String file) { this.file = file; }
+        private final String fallbackFile;
+        Track(String file) { this(file, null); }
+        Track(String file, String fallbackFile) {
+            this.file = file;
+            this.fallbackFile = fallbackFile;
+        }
     }
 
     public enum Sound {
@@ -55,7 +65,7 @@ public final class AudioManager {
     public synchronized void playBgm(Track track) {
         if (track == null || (currentTrack == track && currentBgm != null && currentBgm.isRunning())) return;
         stopBgm();
-        Clip clip = load(track.file);
+        Clip clip = loadBgm(track);
         if (clip == null) return;
         tracks.put(track, clip);
         currentTrack = track;
@@ -117,19 +127,56 @@ public final class AudioManager {
 
     public synchronized void dispose() { stopBgm(); }
 
+    private static Clip loadBgm(Track track) {
+        Clip clip = load(track.file);
+        if (clip == null && track.fallbackFile != null) {
+            clip = load(track.fallbackFile);
+        }
+        return clip;
+    }
+
     private static Clip load(String filename) {
         try {
             AudioAssetGenerator.ensureAssets();
-            File file = AudioAssetGenerator.audioDirectory().resolve(filename).toFile();
-            try (AudioInputStream input = AudioSystem.getAudioInputStream(file)) {
-                Clip clip = AudioSystem.getClip();
-                clip.open(input);
-                return clip;
+            Path userFile = AudioAssetGenerator.audioDirectory().resolve(filename);
+            if (Files.isRegularFile(userFile)) {
+                return load(AudioSystem.getAudioInputStream(userFile.toFile()));
+            }
+
+            // Bundled assets (for example src/main/resources/audio/bgm-game.mp3) are supported too.
+            URL resource = AudioManager.class.getResource("/audio/" + filename);
+            if (resource != null) {
+                return load(AudioSystem.getAudioInputStream(resource));
             }
         } catch (IOException | UnsupportedAudioFileException | LineUnavailableException | IllegalArgumentException ignored) {
             // Audio is optional; missing files or unsupported audio devices must not stop gameplay.
-            return null;
         }
+        return null;
+    }
+
+    private static Clip load(AudioInputStream encoded) throws IOException, LineUnavailableException {
+        try (AudioInputStream source = encoded) {
+            AudioFormat sourceFormat = source.getFormat();
+            AudioInputStream pcm = source;
+            if (!isPcm(sourceFormat)) {
+                int channels = Math.max(1, Math.min(2, sourceFormat.getChannels()));
+                float sampleRate = sourceFormat.getSampleRate() > 0 ? sourceFormat.getSampleRate() : 44100f;
+                AudioFormat target = new AudioFormat(AudioFormat.Encoding.PCM_SIGNED, sampleRate, 16,
+                        channels, channels * 2, sampleRate, false);
+                pcm = AudioSystem.getAudioInputStream(target, source);
+            }
+
+            try (AudioInputStream decoded = pcm) {
+                Clip clip = AudioSystem.getClip();
+                clip.open(decoded);
+                return clip;
+            }
+        }
+    }
+
+    private static boolean isPcm(AudioFormat format) {
+        return AudioFormat.Encoding.PCM_SIGNED.equals(format.getEncoding())
+                || AudioFormat.Encoding.PCM_UNSIGNED.equals(format.getEncoding());
     }
 
     private static void setVolume(Clip clip, float volume) {
