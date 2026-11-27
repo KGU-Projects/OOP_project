@@ -7,12 +7,11 @@ import javax.sound.sampled.Clip;
 import javax.sound.sampled.FloatControl;
 import javax.sound.sampled.LineUnavailableException;
 import javax.sound.sampled.UnsupportedAudioFileException;
-import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.EnumMap;
 import java.util.Map;
 
@@ -38,9 +37,11 @@ public final class AudioManager {
     }
 
     private static final AudioManager INSTANCE = new AudioManager();
+    private static final Path CUSTOM_BGM_FILE = AudioAssetGenerator.audioDirectory().resolve("custom-bgm.mp3");
     private final Map<Track, Clip> tracks = new EnumMap<>(Track.class);
     private Clip currentBgm;
     private Track currentTrack;
+    private Path customBgmFile;
     private int pausedFrame;
     private boolean muted;
     private float bgmVolume = 0.6f;
@@ -72,6 +73,46 @@ public final class AudioManager {
         currentBgm = clip;
         setVolume(clip, bgmVolume);
         if (!muted) clip.loop(Clip.LOOP_CONTINUOUSLY);
+    }
+
+    /** Copies and validates a selected audio file so it remains available on later launches. */
+    public synchronized void setCustomBgm(Path source) throws IOException {
+        if (source == null || !Files.isRegularFile(source)) {
+            throw new IOException("선택한 오디오 파일을 찾을 수 없습니다.");
+        }
+        Path directory = AudioAssetGenerator.audioDirectory();
+        Files.createDirectories(directory);
+        Path temporary = Files.createTempFile(directory, "custom-bgm-", ".mp3");
+        try {
+            Files.copy(source, temporary, StandardCopyOption.REPLACE_EXISTING);
+            Clip probe = load(temporary);
+            if (probe == null) {
+                throw new IOException("MP3를 읽을 수 없습니다. 파일이 손상되었거나 지원하지 않는 형식입니다.");
+            }
+            probe.close();
+            Files.move(temporary, CUSTOM_BGM_FILE, StandardCopyOption.REPLACE_EXISTING);
+            customBgmFile = CUSTOM_BGM_FILE;
+        } finally {
+            Files.deleteIfExists(temporary);
+        }
+        if (currentTrack == Track.GAME) {
+            stopBgm();
+            playBgm(Track.GAME);
+        }
+    }
+
+    /** Removes the selected music and restores the default game soundtrack. */
+    public synchronized void clearCustomBgm() throws IOException {
+        customBgmFile = null;
+        Files.deleteIfExists(CUSTOM_BGM_FILE);
+        if (currentTrack == Track.GAME) {
+            stopBgm();
+            playBgm(Track.GAME);
+        }
+    }
+
+    public synchronized boolean hasCustomBgm() {
+        return customBgmFile != null || Files.isRegularFile(CUSTOM_BGM_FILE);
     }
 
     public synchronized void stopBgm() {
@@ -127,7 +168,16 @@ public final class AudioManager {
 
     public synchronized void dispose() { stopBgm(); }
 
-    private static Clip loadBgm(Track track) {
+    private Clip loadBgm(Track track) {
+        if (track == Track.GAME) {
+            if (customBgmFile == null && Files.isRegularFile(CUSTOM_BGM_FILE)) {
+                customBgmFile = CUSTOM_BGM_FILE;
+            }
+            if (customBgmFile != null) {
+                Clip custom = load(customBgmFile);
+                if (custom != null) return custom;
+            }
+        }
         Clip clip = load(track.file);
         if (clip == null && track.fallbackFile != null) {
             clip = load(track.fallbackFile);
@@ -140,7 +190,8 @@ public final class AudioManager {
             AudioAssetGenerator.ensureAssets();
             Path userFile = AudioAssetGenerator.audioDirectory().resolve(filename);
             if (Files.isRegularFile(userFile)) {
-                return load(AudioSystem.getAudioInputStream(userFile.toFile()));
+                Clip userClip = load(userFile);
+                if (userClip != null) return userClip;
             }
 
             // Bundled assets (for example src/main/resources/audio/bgm-game.mp3) are supported too.
@@ -152,6 +203,14 @@ public final class AudioManager {
             // Audio is optional; missing files or unsupported audio devices must not stop gameplay.
         }
         return null;
+    }
+
+    private static Clip load(Path file) {
+        try {
+            return load(AudioSystem.getAudioInputStream(file.toFile()));
+        } catch (IOException | UnsupportedAudioFileException | LineUnavailableException | IllegalArgumentException ignored) {
+            return null;
+        }
     }
 
     private static Clip load(AudioInputStream encoded) throws IOException, LineUnavailableException {
