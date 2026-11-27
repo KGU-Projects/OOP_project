@@ -1,5 +1,6 @@
 package game.ui.screens;
 
+import game.audio.AudioSettingsDialog;
 import game.common.ScreenType;
 import game.ui.BaseScreen;
 import game.ui.ImageLoader;
@@ -55,6 +56,7 @@ public class StartScreen extends BaseScreen {
         List<MenuItem> menuItems = List.of(
                 new MenuItem("시작", () -> screenManager.show(ScreenType.GAME)),
                 new MenuItem("불러오기", () -> screenManager.show(ScreenType.LOAD)),
+                new MenuItem("오디오 설정", () -> AudioSettingsDialog.show(panel)),
                 new MenuItem("종료", () -> System.exit(0)));
 
         JPanel buttonPanel = new JPanel(new GridLayout(menuItems.size(), 1, 0, 15));

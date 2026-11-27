@@ -13,6 +13,15 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
+    <dependencies>
+        <!-- Java Sound does not include an MP3 decoder; MP3SPI registers one with AudioSystem. -->
+        <dependency>
+            <groupId>com.googlecode.soundlibs</groupId>
+            <artifactId>mp3spi</artifactId>
+            <version>1.9.5.4</version>
+        </dependency>
+    </dependencies>
+
     <build>
         <plugins>
             <plugin>
