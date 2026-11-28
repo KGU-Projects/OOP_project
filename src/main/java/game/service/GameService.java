@@ -262,10 +262,8 @@ public class GameService {
         if (state.isDead()) {
             throw new IllegalStateException("게임 오버 상태입니다");
         }
-        // 물약 쓸지 먼저 골라야 함
-        if (askingPotion) {
-            throw new IllegalStateException("물약 사용 여부를 먼저 골라야 합니다");
-        }
+        // 경고 팝업에 대답 안 하고 답 내면 계속 전투로 봄
+        askingPotion = false;
         boolean correct = currentQuiz.isCorrect(input);
         String explanation = currentQuiz.getExplanation();
         if (correct) {
@@ -321,10 +319,8 @@ public class GameService {
         if (state.isDead()) {
             throw new IllegalStateException("게임 오버 상태입니다");
         }
-        // 물약 쓸지 먼저 골라야 함
-        if (askingPotion) {
-            throw new IllegalStateException("물약 사용 여부를 먼저 골라야 합니다");
-        }
+        // 경고 팝업에 대답 안 하고 답 내면 계속 전투로 봄
+        askingPotion = false;
         return applyWrongAnswer(currentQuiz.getExplanation());
     }
 
