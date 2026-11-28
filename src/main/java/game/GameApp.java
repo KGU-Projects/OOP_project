@@ -15,6 +15,7 @@ import java.awt.CardLayout;
 //import java.awt.Dimension;
 import game.service.GameService;
 import game.service.UserService;
+import game.service.SaveService;
 import game.ui.BaseScreen;
 import game.ui.ScreenManager;
 import game.ui.components.NicknamePopup;
@@ -61,10 +62,15 @@ public class GameApp {
             UserService userService = new UserService(
                     new FileUserRepository(Path.of(GameConstants.USER_DIRECTORY)));
 
+            // 기존: GameService에 저장 창고를 바로 넘김 -> SaveService로 분리해서 수정함.
+            // 저장 창고(FileSaveRepository)를 SaveService에 넘기고, 그 SaveService를 GameService에 넘김.
+            SaveService saveService = new SaveService(
+                    new FileSaveRepository(Path.of(GameConstants.SAVE_DIRECTORY)));
+
             GameService gameService = new GameService(
                     new FileQuizRepository(Path.of(GameConstants.QUIZ_FILE)),
                     new FileStageRepository(Path.of(GameConstants.STAGE_DIRECTORY)),
-                    new FileSaveRepository(Path.of(GameConstants.SAVE_DIRECTORY)),
+                    saveService,
                     userService);
             CutsceneRepository cutsceneRepository = new FileCutsceneRepository(
                     Path.of(GameConstants.CUTSCENE_DIRECTORY));
