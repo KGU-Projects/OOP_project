@@ -22,10 +22,12 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
+import java.util.Set;
 
 public class GameService {
     private static final int FIRST_STAGE = 1;
@@ -60,6 +62,8 @@ public class GameService {
     // 틀려서 HP 1 됐는데 물약 있음 -> 쓸지 물어보는 중
     private boolean askingPotion;
     private final Random random = new Random();
+    // 이번 스테이지에서 낸 문제 번호(같은 문제 반복 안 하게)
+    private final Set<Integer> usedQuizIds = new HashSet<>();
 
     public GameService(QuizRepository quizRepository, StageRepository stageRepository, SaveRepository saveRepository) {
         this(quizRepository, stageRepository, saveRepository, null);
@@ -454,6 +458,7 @@ public class GameService {
         this.stageEntry = entry;
         this.state = new GameState(stage, MAX_HP, entry);
         enemyHp.clear();
+        usedQuizIds.clear();
         this.keyChestId = pickKeyChest(stage);
     }
 
@@ -486,16 +491,30 @@ public class GameService {
         if (candidates.isEmpty()) {
             return null;
         }
+        // 이번 스테이지에서 안 낸 문제만
+        List<Quiz> unused = new ArrayList<>();
+        for (Quiz quiz : candidates) {
+            if (!usedQuizIds.contains(quiz.getId())) {
+                unused.add(quiz);
+            }
+        }
+        // 다 냈으면 처음부터 다시(물약, 미니게임으로 전투가 길어졌을 때)
+        if (unused.isEmpty()) {
+            usedQuizIds.clear();
+            unused = candidates;
+        }
         // 방금 낸 문제 또 안 나오게
-        if (currentQuiz != null && candidates.size() > 1) {
-            for (int i = 0; i < candidates.size(); i++) {
-                if (candidates.get(i).getId() == currentQuiz.getId()) {
-                    candidates.remove(i);
+        if (currentQuiz != null && unused.size() > 1) {
+            for (int i = 0; i < unused.size(); i++) {
+                if (unused.get(i).getId() == currentQuiz.getId()) {
+                    unused.remove(i);
                     break;
                 }
             }
         }
-        return candidates.get(random.nextInt(candidates.size()));
+        Quiz picked = unused.get(random.nextInt(unused.size()));
+        usedQuizIds.add(picked.getId());
+        return picked;
     }
 
     /** 일반 상자 중 하나 랜덤으로 열쇠 상자(미믹 제외) */
