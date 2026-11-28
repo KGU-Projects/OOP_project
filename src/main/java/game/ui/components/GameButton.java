@@ -1,5 +1,7 @@
 package game.ui.components;
 
+import game.audio.AudioManager;
+import game.audio.AudioManager.Sound;
 import game.ui.ImageLoader;
 
 import javax.swing.BorderFactory;
@@ -18,21 +20,17 @@ import java.awt.image.BufferedImage;
 public class GameButton extends JButton {
 
     private static final ImageLoader DEFAULT_LOADER = new ImageLoader();
-
     private final BufferedImage backgroundImage;
     private final boolean drawText;
 
-    // 기존 텍스트 버튼 생성자 (하위 호환 유지)
     public GameButton(String text, Runnable onClick) {
         this(text, (BufferedImage) null, true, onClick);
     }
 
-    // 공용 버튼 틀 이미지 위에 텍스트를 겹쳐 그릴 때 사용
     public GameButton(String text, String imageFileName, Runnable onClick) {
         this(text, imageFileName, true, onClick);
     }
 
-    // 완성형 버튼 이미지(drawText = false) 또는 틀 이미지(drawText = true) 지정
     public GameButton(String text, String imageFileName, boolean drawText, Runnable onClick) {
         this(text, loadImage(imageFileName), drawText, onClick);
     }
@@ -41,11 +39,9 @@ public class GameButton extends JButton {
         super(text);
         this.backgroundImage = backgroundImage;
         this.drawText = drawText;
-
         setPreferredSize(new Dimension(240, 50));
         setFont(new Font("SansSerif", Font.BOLD, 16));
         setFocusPainted(false);
-
         if (this.backgroundImage != null) {
             setOpaque(false);
             setContentAreaFilled(false);
@@ -57,16 +53,16 @@ public class GameButton extends JButton {
                     new LineBorder(new Color(100, 100, 120), 1, true),
                     new EmptyBorder(5, 15, 5, 15)));
         }
-
         if (onClick != null) {
-            addActionListener(e -> onClick.run());
+            addActionListener(e -> {
+                AudioManager.getInstance().play(Sound.BUTTON);
+                onClick.run();
+            });
         }
     }
 
     private static BufferedImage loadImage(String fileName) {
-        if (fileName == null || fileName.isBlank()) {
-            return null;
-        }
+        if (fileName == null || fileName.isBlank()) return null;
         return DEFAULT_LOADER.get(fileName).orElse(null);
     }
 
@@ -76,18 +72,13 @@ public class GameButton extends JButton {
             super.paintComponent(g);
             return;
         }
-
         Graphics2D g2 = (Graphics2D) g.create();
         g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
         g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-
         int w = getWidth();
         int h = getHeight();
         int pressOffset = getModel().isPressed() ? 2 : 0;
-
         g2.drawImage(backgroundImage, 0, pressOffset, w, h - pressOffset, this);
-
-        // 마우스 올림 / 클릭 / 비활성화 시각 피드백
         if (!isEnabled()) {
             g2.setColor(new Color(0, 0, 0, 120));
             g2.fillRect(0, 0, w, h);
@@ -98,7 +89,6 @@ public class GameButton extends JButton {
             g2.setColor(new Color(255, 255, 255, 35));
             g2.fillRect(0, 0, w, h);
         }
-
         if (drawText && getText() != null && !getText().isEmpty()) {
             g2.setFont(getFont());
             g2.setColor(getForeground());
@@ -107,7 +97,6 @@ public class GameButton extends JButton {
             int ty = (h - fm.getHeight()) / 2 + fm.getAscent() + pressOffset;
             g2.drawString(getText(), tx, ty);
         }
-
         g2.dispose();
     }
 }
