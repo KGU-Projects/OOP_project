@@ -30,6 +30,9 @@ public final class QuizBattleLauncher {
 
     private QuizBattleController active;
     private ScreenType returnTo;
+    /** GAME OVER에서 미니게임으로 나가 있는 전투 (성공하면 {@link #resumeAfterMinigame()}으로 이어 간다) */
+    private QuizBattleController suspended;
+    private ScreenType suspendedReturnTo;
 
     public QuizBattleLauncher(ScreenManager screenManager) {
         if (screenManager == null) {
@@ -57,6 +60,7 @@ public final class QuizBattleLauncher {
             return false;
         }
         ScreenType current = screenManager.getCurrentType();
+        suspended = null; // 새 전투를 시작하면 미니게임 대기 중이던 전투는 버린다
         returnTo = current == ScreenType.QUIZ ? null : current;
         QuizBattleController controller = new QuizBattleController(quizScreen, rules, timeLimitSeconds,
                 RETURN_BUTTON_TEXT, reason -> finish(reason, handler));
@@ -70,12 +74,43 @@ public final class QuizBattleLauncher {
         return active != null;
     }
 
+    /** 미니게임에 나가 있어 성공 소식을 기다리는 전투가 있는지 */
+    public boolean isWaitingForMinigame() {
+        return suspended != null;
+    }
+
+    /**
+     * 미니게임에 성공했을 때 호출한다. 퀴즈 화면으로 돌아와 플레이어를 되살리고(GameService.reviveAfterMinigame, HP 2)
+     * 죽기 직전의 같은 문제를 새 제한시간으로 다시 낸다. 몬스터의 남은 HP는 그대로다. 되살리지 못하면 false를 돌려주고
+     * 화면은 바꾸지 않는다. 미니게임 실패·포기 처리는 이 메서드가 아니라 게임 로직이 정한다.
+     */
+    public boolean resumeAfterMinigame() {
+        if (suspended == null) {
+            return false;
+        }
+        QuizBattleController controller = suspended;
+        ScreenType back = suspendedReturnTo;
+        if (!controller.resumeAfterMinigame()) {
+            return false; // 되살리지 못했다: 화면과 대기 상태는 그대로 둔다
+        }
+        suspended = null;
+        suspendedReturnTo = null;
+        active = controller;
+        returnTo = back;
+        screenManager.show(ScreenType.QUIZ);
+        return true;
+    }
+
     /** 진행 중인 전투의 컨트롤러 (없으면 null). 테스트·디버그용 */
     public QuizBattleController getActiveController() {
         return active;
     }
 
     private void finish(QuizBattleController.ExitReason reason, ExitHandler handler) {
+        if (reason == QuizBattleController.ExitReason.MINIGAME) {
+            suspended = active;
+            suspendedReturnTo = returnTo;
+        }
         active = null;
         ScreenType target = returnTo;
         returnTo = null;
@@ -88,7 +123,7 @@ public final class QuizBattleLauncher {
     private static boolean returnsToPreviousScreen(QuizBattleController.ExitReason reason) {
         return switch (reason) {
             case VICTORY, NO_QUIZ, ABORTED, GO_RECOVER -> true;
-            case RESTART_STAGE, STAGE_SELECT -> false;
+            case RESTART_STAGE, STAGE_SELECT, MINIGAME, MAIN_MENU -> false;
         };
     }
 }
