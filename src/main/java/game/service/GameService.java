@@ -34,8 +34,8 @@ public class GameService {
     private static final int ENEMY_DAMAGE = 1;
     // 파일에 적 HP가 0이면 이걸로
     private static final int DEFAULT_ENEMY_HP = 3;
-    // 미니게임 회복량(협의 후 수정)
-    private static final int MINIGAME_HEAL = 1;
+    // 미니게임 성공 시 회복량
+    private static final int MINIGAME_HEAL = 2;
     // 일반 상자랑 같은 점수
     private static final int KEY_CHEST_SCORE = 50;
 
