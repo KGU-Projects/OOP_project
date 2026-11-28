@@ -343,7 +343,7 @@ public class GameService {
         }
         askingPotion = false;
         if (use) {
-            return ItemType.HEALTH_POTION.use(state);
+            return useHealItem().success();
         }
         return false;
     }
@@ -395,6 +395,24 @@ public class GameService {
     /** 클리어 조건: 몬스터 다 잡기 + 열쇠 */
     public boolean canClearStage() {
         return areAllMonstersDefeated() && hasKey();
+    }
+
+    /** 물약 쓴 결과: 성공 여부, 지금 HP, 남은 물약 수 */
+    public record HealResult(boolean success, int hp, int potionCount) {
+    }
+
+    /** 물약 있음/없음 */
+    public boolean hasHealItem() {
+        return state != null && state.getItemCount(ItemType.HEALTH_POTION) > 0;
+    }
+
+    /** 물약 쓰기(1개 쓰고 HP +1, HP 꽉 찼거나 물약 없으면 아무것도 안 바뀜) */
+    public HealResult useHealItem() {
+        if (state == null) {
+            return new HealResult(false, 0, 0);
+        }
+        boolean success = useItem(ItemType.HEALTH_POTION);
+        return new HealResult(success, state.getHp(), state.getItemCount(ItemType.HEALTH_POTION));
     }
 
     /** HP 1이고 물약 있으면 true(회복 안내용) */
