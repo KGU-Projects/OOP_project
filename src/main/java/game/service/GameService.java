@@ -33,7 +33,7 @@ public class GameService {
     private static final int WRONG_ANSWER_DAMAGE = 1;
     private static final int ENEMY_DAMAGE = 1;
     // 파일에 적 HP가 0이면 이걸로
-    private static final int DEFAULT_ENEMY_HP = 1;
+    private static final int DEFAULT_ENEMY_HP = 3;
     // 미니게임 회복량(협의 후 수정)
     private static final int MINIGAME_HEAL = 1;
     // 일반 상자랑 같은 점수
@@ -57,6 +57,8 @@ public class GameService {
     private final Map<String, Integer> enemyHp = new HashMap<>();
     // 열쇠 들어있는 상자 ID
     private String keyChestId;
+    // HP 1에서 틀렸는데 물약 있음 -> 쓸지 물어보는 중
+    private boolean askingPotion;
     private final Random random = new Random();
 
     public GameService(QuizRepository quizRepository, StageRepository stageRepository, SaveRepository saveRepository) {
@@ -260,6 +262,10 @@ public class GameService {
         if (state.isDead()) {
             throw new IllegalStateException("게임 오버 상태입니다");
         }
+        // 물약 쓸지 먼저 골라야 함
+        if (askingPotion) {
+            throw new IllegalStateException("물약 사용 여부를 먼저 골라야 합니다");
+        }
         boolean correct = currentQuiz.isCorrect(input);
         String explanation = currentQuiz.getExplanation();
         if (correct) {
@@ -293,6 +299,13 @@ public class GameService {
     }
 
     private AnswerResult applyWrongAnswer(String explanation) {
+        // 이번에 죽는데 물약 있으면 바로 안 죽이고 물어봄
+        if (state.getHp() <= WRONG_ANSWER_DAMAGE && state.getItemCount(ItemType.HEALTH_POTION) > 0) {
+            askingPotion = true;
+            AudioManager.getInstance().play(Sound.WRONG);
+            // 아직 HP 안 깎음
+            return new AnswerResult(false, explanation, 0, 0, false, 0, false);
+        }
         state.damage(WRONG_ANSWER_DAMAGE);
         AudioManager.getInstance().play(Sound.WRONG);
         AudioManager.getInstance().play(Sound.HIT);
@@ -311,6 +324,10 @@ public class GameService {
         if (state.isDead()) {
             throw new IllegalStateException("게임 오버 상태입니다");
         }
+        // 물약 쓸지 먼저 골라야 함
+        if (askingPotion) {
+            throw new IllegalStateException("물약 사용 여부를 먼저 골라야 합니다");
+        }
         return applyWrongAnswer(currentQuiz.getExplanation());
     }
 
@@ -318,6 +335,31 @@ public class GameService {
         if (state != null && currentTarget != null) state.getPlayer().suppressObjectUntilLeave(currentTarget.getId());
         currentQuiz = null;
         currentTarget = null;
+        askingPotion = false;
+    }
+
+    /** 물약 쓸지 물어보는 중이면 true(화면에서 예/아니요 창 띄울 때) */
+    public boolean isAskingPotion() {
+        return askingPotion;
+    }
+
+    /** 물약 쓸지 대답(예 -> 물약 쓰고 HP 1로 살기, 아니요 -> HP 0) 살았으면 true */
+    public boolean answerPotion(boolean use) {
+        if (!askingPotion) {
+            throw new IllegalStateException("물약을 물어보는 중이 아닙니다");
+        }
+        askingPotion = false;
+        if (use) {
+            // 물약 +1, 오답 -1이라 HP 그대로
+            state.consumeItem(ItemType.HEALTH_POTION);
+            currentQuiz = pickQuiz();
+            return true;
+        }
+        state.damage(WRONG_ANSWER_DAMAGE);
+        AudioManager.getInstance().play(Sound.HIT);
+        AudioManager.getInstance().play(Sound.DEFEAT);
+        // 미니게임 후 이 문제로 돌아와야 해서 안 바꿈
+        return false;
     }
 
     /** 지금 싸우는 적 남은 HP(전투 화면용) */
