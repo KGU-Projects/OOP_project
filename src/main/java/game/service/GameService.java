@@ -57,7 +57,7 @@ public class GameService {
     private final Map<String, Integer> enemyHp = new HashMap<>();
     // 열쇠 들어있는 상자 ID
     private String keyChestId;
-    // HP 1에서 틀렸는데 물약 있음 -> 쓸지 물어보는 중
+    // 틀려서 HP 1 됐는데 물약 있음 -> 쓸지 물어보는 중
     private boolean askingPotion;
     private final Random random = new Random();
 
@@ -299,13 +299,6 @@ public class GameService {
     }
 
     private AnswerResult applyWrongAnswer(String explanation) {
-        // 이번에 죽는데 물약 있으면 바로 안 죽이고 물어봄
-        if (state.getHp() <= WRONG_ANSWER_DAMAGE && state.getItemCount(ItemType.HEALTH_POTION) > 0) {
-            askingPotion = true;
-            AudioManager.getInstance().play(Sound.WRONG);
-            // 아직 HP 안 깎음
-            return new AnswerResult(false, explanation, 0, 0, false, 0, false);
-        }
         state.damage(WRONG_ANSWER_DAMAGE);
         AudioManager.getInstance().play(Sound.WRONG);
         AudioManager.getInstance().play(Sound.HIT);
@@ -314,6 +307,10 @@ public class GameService {
         // 죽었으면 미니게임 후 이 문제로 돌아와야 해서 안 바꿈
         if (!isDead) {
             currentQuiz = pickQuiz();
+        }
+        // HP 1 됐는데 물약 있으면 쓸지 물어봄
+        if (canUseHealItem()) {
+            askingPotion = true;
         }
         return new AnswerResult(false, explanation, 0, WRONG_ANSWER_DAMAGE, isDead, 0, false);
     }
@@ -338,27 +335,20 @@ public class GameService {
         askingPotion = false;
     }
 
-    /** 물약 쓸지 물어보는 중이면 true(화면에서 예/아니요 창 띄울 때) */
+    /** 물약 쓸지 물어보는 중이면 true(HP 1 경고 팝업 띄울 때) */
     public boolean isAskingPotion() {
         return askingPotion;
     }
 
-    /** 물약 쓸지 대답(예 -> 물약 쓰고 HP 1로 살기, 아니요 -> HP 0) 살았으면 true */
+    /** HP 1 경고 팝업 대답(회복 아이템 사용 -> 물약 1개 쓰고 HP 2, 계속 전투 -> HP 1 그대로) 물약 썼으면 true */
     public boolean answerPotion(boolean use) {
         if (!askingPotion) {
             throw new IllegalStateException("물약을 물어보는 중이 아닙니다");
         }
         askingPotion = false;
         if (use) {
-            // 물약 +1, 오답 -1이라 HP 그대로
-            state.consumeItem(ItemType.HEALTH_POTION);
-            currentQuiz = pickQuiz();
-            return true;
+            return ItemType.HEALTH_POTION.use(state);
         }
-        state.damage(WRONG_ANSWER_DAMAGE);
-        AudioManager.getInstance().play(Sound.HIT);
-        AudioManager.getInstance().play(Sound.DEFEAT);
-        // 미니게임 후 이 문제로 돌아와야 해서 안 바꿈
         return false;
     }
 
