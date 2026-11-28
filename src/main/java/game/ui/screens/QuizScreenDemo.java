@@ -1,15 +1,22 @@
 package game.ui.screens;
 
+import game.common.GameConstants;
 import game.common.ScreenType;
 import game.model.quiz.ChoiceQuiz;
 import game.model.quiz.InputQuiz;
 import game.model.quiz.Quiz;
+import game.repository.file.DataFormatException;
+import game.repository.file.FileQuizRepository;
 import game.ui.ScreenManager;
 
 import javax.swing.JFrame;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
 import java.awt.CardLayout;
+import java.awt.GraphicsEnvironment;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
 
@@ -25,13 +32,17 @@ import java.util.Optional;
  * 데모에는 맵·스테이지가 없으므로 화면을 떠나는 선택(승리 후 '다시 플레이', 전투 중단, 체력 보충, 재시작,
  * 스테이지 선택)은 모두 즉시 재도전으로 처리한다 (HP를 처음 값으로 되돌린다).
  *
- * 실행: java -cp out game.ui.screens.QuizScreenDemo [제한시간초]
+ * 문제는 data/quiz.txt에서 해당 스테이지 것만 읽는다 (기본 스테이지 1). 읽기 실패·문제 없음은 오류로 알리고 종료한다.
+ *
+ * 실행: java -cp out game.ui.screens.QuizScreenDemo [제한시간초] [스테이지]
  */
 public final class QuizScreenDemo implements QuizBattleController.BattleRules {
 
     public static final int PLAYER_MAX_HP = 3;
     public static final int MONSTER_MAX_HP = 3;
     public static final int TIME_LIMIT_SECONDS = 20;
+    public static final int DEFAULT_STAGE = 1;
+    public static final int DEFAULT_RECOVERY_ITEMS = 1;
     private static final String RETURN_BUTTON_TEXT = "다시 플레이";
 
     private static final int WINDOW_WIDTH = 1280;
@@ -43,9 +54,14 @@ public final class QuizScreenDemo implements QuizBattleController.BattleRules {
 
     private final List<Quiz> quizzes;
     private final QuizBattleController controller;
+    private final QuizScreen screen;
+    private QuizScreen.MonsterType monsterType = QuizScreen.MonsterType.GHOST;
 
     private int playerHp;
     private int monsterHp;
+    /** 전투를 시작할 때 갖고 있는 회복 아이템 수 (테스트에서 0으로 바꾸면 HP 1 팝업이 뜨지 않는다) */
+    private int initialRecoveryItems = DEFAULT_RECOVERY_ITEMS;
+    private int recoveryItems;
     private int nextQuizIndex;
     private boolean started;
     private QuizBattleController.ExitReason lastExitReason;
@@ -60,6 +76,7 @@ public final class QuizScreenDemo implements QuizBattleController.BattleRules {
         if (timeLimitSeconds <= 0) {
             throw new IllegalArgumentException("timeLimitSeconds must be positive: " + timeLimitSeconds);
         }
+        this.screen = screen;
         this.quizzes = List.copyOf(quizzes);
         // 데모는 어떤 이유로 화면을 떠나든 바로 다시 시작한다
         this.controller = new QuizBattleController(screen, this, timeLimitSeconds, RETURN_BUTTON_TEXT,
@@ -73,9 +90,23 @@ public final class QuizScreenDemo implements QuizBattleController.BattleRules {
     public void startBattle() {
         playerHp = PLAYER_MAX_HP;
         monsterHp = MONSTER_MAX_HP;
+        recoveryItems = initialRecoveryItems;
         nextQuizIndex = 0;
         started = true;
-        controller.start("사용자", "몬스터 (오류 버그)");
+        screen.setMonsterType(monsterType); // 전투 대상: 이름과 이미지를 함께 정한다
+        controller.start("사용자", monsterType.displayName());
+    }
+
+    /** 다음 전투부터 나올 몬스터 종류 (골렘 / 미믹 / 유령). 이름과 이미지가 함께 바뀐다. */
+    public void setMonsterType(QuizScreen.MonsterType type) {
+        if (type != null) {
+            this.monsterType = type;
+        }
+    }
+
+    /** 객관식 보기 배치 (AUTO: 문제마다 자동 기본, WIDE: 가로 4줄 고정, GRID: 2×2 고정) */
+    public void setChoiceLayout(QuizScreen.ChoiceLayout layout) {
+        screen.setChoiceLayout(layout);
     }
 
     // ---------------------------------------------------------------------
@@ -107,6 +138,31 @@ public final class QuizScreenDemo implements QuizBattleController.BattleRules {
     @Override
     public QuizBattleController.HpView hp() {
         return new QuizBattleController.HpView(playerHp, PLAYER_MAX_HP, monsterHp, MONSTER_MAX_HP);
+    }
+
+    /** 다음 전투부터 가지고 시작할 회복 아이템 수 (데모 전용) */
+    public void setInitialRecoveryItems(int count) {
+        this.initialRecoveryItems = Math.max(0, count);
+    }
+
+    public int getRecoveryItems() {
+        return recoveryItems;
+    }
+
+    @Override
+    public boolean hasRecoveryItem() {
+        return recoveryItems > 0;
+    }
+
+    /** 데모의 아이템 사용: HP +1(최대 HP까지), 아이템 1개 소모. 실제 게임에서는 GameService의 API가 한다. */
+    @Override
+    public boolean useRecoveryItem() {
+        if (recoveryItems <= 0 || playerHp >= PLAYER_MAX_HP) {
+            return false;
+        }
+        recoveryItems--;
+        playerHp++;
+        return true;
     }
 
     private QuizBattleController.Judgement damagePlayer() {
@@ -314,10 +370,53 @@ public final class QuizScreenDemo implements QuizBattleController.BattleRules {
 
 
     // ---------------------------------------------------------------------
+    // 실제 문제 데이터 (data/quiz.txt)
+    // ---------------------------------------------------------------------
+
+    /** 문제 파일을 읽지 못했거나 해당 스테이지 문제가 없을 때. 메시지는 사용자에게 그대로 보여 준다. */
+    public static final class QuizLoadException extends Exception {
+        public QuizLoadException(String message, Throwable cause) {
+            super(message, cause);
+        }
+    }
+
+    /** {@link GameConstants#QUIZ_FILE}에서 해당 스테이지의 문제만 읽는다. */
+    public static List<Quiz> loadStageQuizzes(int stageNo) throws QuizLoadException {
+        return loadStageQuizzes(Path.of(GameConstants.QUIZ_FILE), stageNo);
+    }
+
+    /** 파일을 읽어 해당 스테이지 문제만 파일 순서대로 돌려준다. 문제를 다른 것으로 대체하지 않는다. */
+    public static List<Quiz> loadStageQuizzes(Path file, int stageNo) throws QuizLoadException {
+        if (!Files.isRegularFile(file)) {
+            throw new QuizLoadException("문제 파일을 찾을 수 없습니다: " + file.toAbsolutePath()
+                    + "\n프로젝트 루트에서 실행했는지 확인하세요.", null);
+        }
+        List<Quiz> all;
+        try {
+            all = new FileQuizRepository(file).findAll();
+        } catch (DataFormatException e) {
+            throw new QuizLoadException("문제 데이터 오류: " + e.getMessage(), e);
+        } catch (RuntimeException e) {
+            throw new QuizLoadException("문제 파일을 읽지 못했습니다: " + file + " (" + e.getMessage() + ")", e);
+        }
+        List<Quiz> stage = all.stream().filter(q -> q.getStageNo() == stageNo).toList();
+        if (stage.isEmpty()) {
+            throw new QuizLoadException("스테이지 " + stageNo + "의 문제가 " + file.getFileName()
+                    + "에 없습니다. (전체 " + all.size() + "문항)", null);
+        }
+        return stage;
+    }
+
+    // ---------------------------------------------------------------------
     // 독립 실행
     // ---------------------------------------------------------------------
 
-    /** 인자로 제한시간(초)을 줄 수 있다. 없으면 20초. */
+    /**
+     * 인자: [제한시간초] [스테이지] [화면] [몬스터]. 제한시간 기본 20초, 스테이지 기본 1.
+     * 스테이지만 주려면 제한시간 자리에도 값을 넣는다 (예: 20 3).
+     * 화면: auto(객관식 배치를 문제마다 자동 선택, 기본) / wide(가로 4줄 고정) / grid(2×2 고정) / input(단답형. 내장 데모 단답형 문제를 쓴다).
+     * 몬스터: ghost(기본) / golem / mimic. 예: 20 1 grid golem
+     */
     public static void main(String[] args) {
         int timeLimit = TIME_LIMIT_SECONDS;
         if (args.length > 0) {
@@ -330,13 +429,74 @@ public final class QuizScreenDemo implements QuizBattleController.BattleRules {
                 timeLimit = TIME_LIMIT_SECONDS;
             }
         }
+        int stage = DEFAULT_STAGE;
+        if (args.length > 1) {
+            try {
+                stage = Integer.parseInt(args[1].trim());
+            } catch (NumberFormatException e) {
+                fail("스테이지는 숫자로 입력하세요: '" + args[1] + "'\n사용법: QuizScreenDemo [제한시간초] [스테이지]");
+                return;
+            }
+        }
+        String view = args.length > 2 ? args[2].trim().toLowerCase() : "auto";
+        if (!List.of("auto", "wide", "grid", "input").contains(view)) {
+            fail("화면은 auto, wide, grid, input 중 하나여야 합니다: '" + args[2] + "'\n사용법: QuizScreenDemo [제한시간초] [스테이지] [화면] [몬스터]");
+            return;
+        }
+        QuizScreen.MonsterType monster = QuizScreen.MonsterType.GHOST;
+        if (args.length > 3) {
+            Optional<QuizScreen.MonsterType> parsed = QuizScreen.MonsterType.fromName(args[3].trim());
+            if (parsed.isEmpty()) {
+                fail("몬스터는 ghost, golem, mimic 중 하나여야 합니다: '" + args[3] + "'");
+                return;
+            }
+            monster = parsed.get();
+        }
         int finalTimeLimit = timeLimit;
-        SwingUtilities.invokeLater(() -> launch(finalTimeLimit));
+        int finalStage = stage;
+        QuizScreen.MonsterType finalMonster = monster;
+        List<Quiz> quizzes;
+        String label;
+        if (view.equals("input")) {
+            quizzes = createDemoQuizzes().stream().filter(q -> q instanceof InputQuiz).toList();
+            label = "내장 데모 단답형 문제";
+        } else {
+            try {
+                quizzes = loadStageQuizzes(finalStage);
+            } catch (QuizLoadException e) {
+                fail(e.getMessage());
+                return;
+            }
+            label = "스테이지 " + finalStage;
+        }
+        List<Quiz> finalQuizzes = quizzes;
+        QuizScreen.ChoiceLayout choiceLayout = view.equals("grid") ? QuizScreen.ChoiceLayout.GRID
+                : view.equals("wide") ? QuizScreen.ChoiceLayout.WIDE : QuizScreen.ChoiceLayout.AUTO;
+        SwingUtilities.invokeLater(() -> launch(finalTimeLimit, finalQuizzes, label, choiceLayout, finalMonster));
     }
 
-    /** 데모 창을 띄우고 전투를 시작한다. EDT에서 호출한다. */
+    private static void fail(String message) {
+        System.err.println(message);
+        if (!GraphicsEnvironment.isHeadless()) {
+            JOptionPane.showMessageDialog(null, message, "퀴즈 데모 오류", JOptionPane.ERROR_MESSAGE);
+        }
+        System.exit(1);
+    }
+
+    /** 기존 하드코딩 데모 문제로 데모 창을 띄운다 (공개 API 유지). EDT에서 호출한다. */
     public static QuizScreenDemo launch(int timeLimitSeconds) {
-        JFrame frame = new JFrame("CODE ESCAPE - 퀴즈 전투 데모");
+        return launch(timeLimitSeconds, createDemoQuizzes(), "내장 데모 문제");
+    }
+
+    /** 주어진 문제로 데모 창을 띄우고 전투를 시작한다. EDT에서 호출한다. */
+    public static QuizScreenDemo launch(int timeLimitSeconds, List<Quiz> quizzes, String sourceLabel) {
+        return launch(timeLimitSeconds, quizzes, sourceLabel, QuizScreen.ChoiceLayout.AUTO, QuizScreen.MonsterType.GHOST);
+    }
+
+    /** 주어진 문제·보기 배치·몬스터로 데모 창을 띄우고 전투를 시작한다. EDT에서 호출한다. */
+    public static QuizScreenDemo launch(int timeLimitSeconds, List<Quiz> quizzes, String sourceLabel,
+                                        QuizScreen.ChoiceLayout choiceLayout, QuizScreen.MonsterType monster) {
+        JFrame frame = new JFrame("CODE ESCAPE - 퀴즈 전투 데모 (" + sourceLabel + ")");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setSize(WINDOW_WIDTH, WINDOW_HEIGHT);
         frame.setResizable(false);
@@ -349,7 +509,9 @@ public final class QuizScreenDemo implements QuizBattleController.BattleRules {
 
         QuizScreen quizScreen = new QuizScreen(screenManager);
         screenManager.register(ScreenType.QUIZ, quizScreen);
-        QuizScreenDemo demo = new QuizScreenDemo(quizScreen, createDemoQuizzes(), timeLimitSeconds);
+        QuizScreenDemo demo = new QuizScreenDemo(quizScreen, quizzes, timeLimitSeconds);
+        demo.setMonsterType(monster);
+        demo.setChoiceLayout(choiceLayout);
 
         frame.add(container);
         frame.setVisible(true);
