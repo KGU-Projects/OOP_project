@@ -14,7 +14,6 @@ import game.model.object.GameObject;
 import game.model.object.ObjectType;
 import game.model.quiz.Quiz;
 import game.repository.QuizRepository;
-import game.repository.SaveRepository;
 import game.repository.StageRepository;
 
 import java.time.LocalDateTime;
@@ -43,12 +42,13 @@ public class GameService {
 
     private final QuizRepository quizRepository;
     private final StageRepository stageRepository;
-    private final SaveRepository saveRepository;
+    // 기존: 저장 창고를 직접 가짐 -> SaveService로 분리해서 수정함.
+    private final SaveService saveService;
     private final UserService userService;
     private User user;
     private String nickname;
     private GameState state;
-    private int currentSlot;
+    // currentSlot은 지움. SaveService가 가짐
     private Quiz currentQuiz;
     private GameObject currentTarget;
 
@@ -65,15 +65,15 @@ public class GameService {
     // 이번 스테이지에서 낸 문제 번호(같은 문제 반복 안 하게)
     private final Set<Integer> usedQuizIds = new HashSet<>();
 
-    public GameService(QuizRepository quizRepository, StageRepository stageRepository, SaveRepository saveRepository) {
-        this(quizRepository, stageRepository, saveRepository, null);
+    public GameService(QuizRepository quizRepository, StageRepository stageRepository, SaveService saveService) {
+        this(quizRepository, stageRepository, saveService, null);
     }
 
-    public GameService(QuizRepository quizRepository, StageRepository stageRepository, SaveRepository saveRepository,
+    public GameService(QuizRepository quizRepository, StageRepository stageRepository, SaveService saveService,
                        UserService userService) {
         this.quizRepository = quizRepository;
         this.stageRepository = stageRepository;
-        this.saveRepository = saveRepository;
+        this.saveService = saveService;
         this.userService = userService;
     }
 
@@ -81,7 +81,7 @@ public class GameService {
         if (user == null) throw new IllegalArgumentException("사용자가 없습니다");
         if (!user.getNickname().equals(this.nickname)) {
             this.state = null;
-            this.currentSlot = 0;
+            saveService.resetCurrentSlot();
             this.currentQuiz = null;
             this.currentTarget = null;
         }
@@ -100,66 +100,38 @@ public class GameService {
         Stage firstStage = stageRepository.findByNumber(FIRST_STAGE)
                 .orElseThrow(() -> new IllegalStateException("1스테이지 파일이 없습니다"));
         startStage(firstStage, null);
-        this.currentSlot = 0;
+        saveService.resetCurrentSlot();
     }
 
     public void continueGame(int slot) {
-        SaveData save = saveRepository.find(requireNickname(), slot)
-                .orElseThrow(() -> new IllegalStateException(slot + "번 저장 칸이 비어 있습니다"));
+        // 기존: saveRepository로 직접 읽음 -> SaveService로 분리해서 수정함.
+        SaveData save = saveService.load(requireNickname(), slot);
         Stage stage = stageRepository.findByNumber(save.getNextStageNo())
                 .or(() -> stageRepository.findByNumber(save.getClearedStage()))
                 .orElseThrow(() -> new IllegalStateException("스테이지 파일이 없습니다"));
         // 저장된 점수, 아이템으로 시작
         startStage(stage, makeStageEntry(save.getScore(), save.getInventory()));
-        this.currentSlot = slot;
     }
 
     public int autoSaveOnStageClear() {
         if (state == null) throw new IllegalStateException("진행 중인 게임이 없습니다");
-        int targetSlot = resolveAutoSaveSlot();
-        Map<ItemType, Integer> inventory = new EnumMap<>(ItemType.class);
-        for (ItemType type : ItemType.values()) {
-            int count = state.getItemCount(type);
-            if (count > 0) inventory.put(type, count);
-        }
-        SaveData data = new SaveData(state.getStage().getNumber(), state.getHp(), state.getScore(), inventory,
-                LocalDateTime.now());
-        saveRepository.save(requireNickname(), targetSlot, data);
-        this.currentSlot = targetSlot;
+        // 기존: 칸 고르기, 저장을 직접 함 -> SaveService로 분리해서 수정함.
+        int targetSlot = saveService.autoSave(requireNickname(), state);
         if (userService != null) userService.recordStageClear(user, state.getScore());
         return targetSlot;
     }
 
     public void deleteSave(int slot) {
-        saveRepository.delete(requireNickname(), slot);
-        if (currentSlot == slot) currentSlot = 0;
-    }
-
-    private int resolveAutoSaveSlot() {
-        if (currentSlot >= 1 && currentSlot <= GameConstants.SAVE_SLOT_COUNT) return currentSlot;
-        int oldestSlot = 1;
-        LocalDateTime oldestTime = null;
-        for (int slot = 1; slot <= GameConstants.SAVE_SLOT_COUNT; slot++) {
-            Optional<SaveData> existing = saveRepository.find(requireNickname(), slot);
-            if (existing.isEmpty()) return slot;
-            LocalDateTime savedAt = existing.get().getSavedAt();
-            if (oldestTime == null || savedAt.isBefore(oldestTime)) {
-                oldestTime = savedAt;
-                oldestSlot = slot;
-            }
-        }
-        return oldestSlot;
+        // 기존: saveRepository로 직접 지움 -> SaveService로 분리해서 수정함.
+        saveService.delete(requireNickname(), slot);
     }
 
     public List<Optional<SaveData>> getAllSaveSlots() {
-        List<Optional<SaveData>> slots = new ArrayList<>(GameConstants.SAVE_SLOT_COUNT);
-        for (int slot = 1; slot <= GameConstants.SAVE_SLOT_COUNT; slot++) {
-            slots.add(nickname == null ? Optional.empty() : saveRepository.find(nickname, slot));
-        }
-        return slots;
+        // 기존: 칸 1~3을 직접 읽음 -> SaveService로 분리해서 수정함.
+        return saveService.getAllSlots(nickname);
     }
 
-    public int getCurrentSlot() { return currentSlot; }
+    public int getCurrentSlot() { return saveService.getCurrentSlot(); }
 
     // 태호 님 #26(미니맵)에서 가져옴
     /** 번호 순 전체 스테이지 목록(미니맵의 방 목록용). */
@@ -204,10 +176,10 @@ public class GameService {
         return true;
     }
 
-    public boolean canRestartFromSave() { return currentSlot != 0; }
+    public boolean canRestartFromSave() { return getCurrentSlot() != 0; }
     public boolean restartFromSave() {
         if (!canRestartFromSave()) return false;
-        continueGame(currentSlot);
+        continueGame(getCurrentSlot());
         return true;
     }
 
